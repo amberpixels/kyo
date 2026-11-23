@@ -40,7 +40,7 @@ demo: build
 # fixture playbook into the aggregator's testdata, plus the stdout again in the
 # yaml result format, e.g. `just record flow`. Rerun when the protocol moves
 [group('dev')]
-record +NAMES="basic flow fail":
+record +NAMES="basic flow fail edge":
     #!/usr/bin/env bash
     set -euo pipefail
     out=internal/aggregator/testdata

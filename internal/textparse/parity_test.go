@@ -123,7 +123,7 @@ func readLines(t *testing.T, path string) []string {
 // expects the same view from both.
 func TestRecordedParity(t *testing.T) {
 	dir := filepath.Join("..", "aggregator", "testdata")
-	for _, name := range []string{"basic", "flow", "fail"} {
+	for _, name := range []string{"basic", "flow", "fail", "edge"} {
 		var evs []events.Event
 		for _, l := range readLines(t, filepath.Join(dir, name+".jsonl")) {
 			ev, err := events.Decode([]byte(l))
@@ -168,6 +168,8 @@ func TestLiveParity(t *testing.T) {
 		},
 		{playbook: "flow.yml"},
 		{playbook: "fail.yml", env: []string{"ANSIBLE_CALLBACK_RESULT_FORMAT=yaml"}},
+		{playbook: "edge.yml"},
+		{playbook: "edge.yml", env: []string{"ANSIBLE_CALLBACK_RESULT_FORMAT=yaml"}},
 	}
 	for _, c := range cases {
 		t.Run(strings.Join(append(append([]string{c.playbook}, c.args...), c.env...), " "), func(t *testing.T) {

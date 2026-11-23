@@ -104,7 +104,8 @@ func (s *Switch) Stdout(line string) {
 }
 
 // Finish ends the run: an undecided switch that saw a PLAY banner takes the
-// text, and the parser's last events are sent. It returns the source.
+// text, and the parser's last events are sent. It returns the source, None
+// when the text never showed a PLAY banner, KYO_NO_PLUGIN or not.
 func (s *Switch) Finish() Source {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -113,6 +114,9 @@ func (s *Switch) Finish() Source {
 	}
 	if s.src.IsText() {
 		s.parser.Finish()
+		if !s.parser.Played() {
+			s.src = None
+		}
 	}
 	return s.src
 }

@@ -113,6 +113,14 @@ func TestForceText(t *testing.T) {
 	}
 }
 
+func TestForceTextWithoutDefaultCallback(t *testing.T) {
+	h := newHarness(true)
+	h.lines("web-1 | SUCCESS => {", "}")
+	if src := h.Finish(); src != None || len(h.got) != 0 {
+		t.Errorf("source %v, got %v: no PLAY banner means no view, KYO_NO_PLUGIN or not", src, h.kinds())
+	}
+}
+
 func TestNeitherSource(t *testing.T) {
 	h := newHarness(false)
 	h.lines("web-1 | SUCCESS => {", "}")

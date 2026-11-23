@@ -14,6 +14,10 @@ import (
 	"github.com/amberpixels/kyo/internal/events"
 )
 
+// loopFailedMsg is the message ansible gives a loop's own result when an item
+// failed; the text prints only the items' messages.
+const loopFailedMsg = "One or more items failed"
+
 // msgLimit matches the plugin's cap on a result message, in characters.
 const msgLimit = 2000
 
@@ -35,11 +39,11 @@ type Parser struct {
 	tasks   int
 	task    string // current task uuid
 
-	body    *body   // a result whose body is still being read
-	held    *result // a failure waiting one line for "...ignoring"
-	items   map[string]*result
-	order   []string // item hosts in first-seen order
-	lastBad string   // the host of the last failed item, for "...ignoring"
+	body     *body   // a result whose body is still being read
+	held     *result // a failure waiting one line for "...ignoring"
+	items    map[string]*result
+	order    []string        // item hosts in first-seen order
+	included map[string]bool // hosts this task's include lines already reported
 
 	recap map[string]events.HostStats // non-nil inside the PLAY RECAP block
 }
@@ -50,7 +54,7 @@ func New(pb Playbook, now func() time.Time, emit func(events.Event)) *Parser {
 	if now == nil {
 		now = time.Now
 	}
-	return &Parser{pb: pb, now: now, emit: emit, items: map[string]*result{}}
+	return &Parser{pb: pb, now: now, emit: emit, items: map[string]*result{}, included: map[string]bool{}}
 }
 
 // Played reports whether a PLAY banner has been seen, the sign that the output
@@ -89,7 +93,8 @@ func (p *Parser) Line(raw string) {
 			}
 			return
 		}
-		if strings.HasPrefix(line, " ") {
+		// block scalars carry empty lines; only an unindented line ends the body
+		if line == "" || strings.HasPrefix(line, " ") {
 			b.lines = append(b.lines, line)
 			return
 		}
@@ -106,9 +111,14 @@ func (p *Parser) Line(raw string) {
 		}
 		p.result(r)
 	}
+	// After a loop, "...ignoring" follows each failed host's items, but other
+	// hosts' items can print in between, so it can't name its host. ignore_errors
+	// is a task keyword, so it applies to every host whose items failed.
 	if strings.TrimSpace(line) == "...ignoring" {
-		if r := p.items[p.lastBad]; r != nil && r.status == events.StatusFailed {
-			r.status = events.StatusIgnored
+		for _, r := range p.items {
+			if r.status == events.StatusFailed {
+				r.status = events.StatusIgnored
+			}
 		}
 		return
 	}
@@ -216,8 +226,13 @@ func (p *Parser) resultLine(line string) {
 	// an include task's result, which the recap counts as ok on each host
 	if rest, ok := strings.CutPrefix(line, "included: "); ok {
 		if _, hosts, ok := strings.CutLast(rest, " for "); ok {
+			hosts, _, _ = strings.Cut(hosts, " => (item=") // a looped include names its item
+			// a looped include prints a line per item, but is one result per host
 			for h := range strings.SplitSeq(hosts, ", ") {
-				p.result(&result{host: h, status: events.StatusOK})
+				if !p.included[h] {
+					p.included[h] = true
+					p.result(&result{host: h, status: events.StatusOK})
+				}
 			}
 		}
 		return
@@ -333,7 +348,8 @@ func (p *Parser) endBody() {
 // waits for a possible "...ignoring", the rest go out now.
 func (p *Parser) complete(r *result) {
 	r.msg = truncate(r.msg)
-	if r.item {
+	// a fully skipped loop prints "skipping: [h]" after its items: the same result
+	if r.item || p.items[r.host] != nil {
 		p.addItem(r)
 		return
 	}
@@ -360,9 +376,6 @@ var rank = map[events.Status]int{
 }
 
 func (p *Parser) addItem(r *result) {
-	if r.status == events.StatusFailed || r.status == events.StatusUnreachable {
-		p.lastBad = r.host
-	}
 	cur := p.items[r.host]
 	if cur == nil {
 		p.items[r.host] = r
@@ -383,10 +396,15 @@ func (p *Parser) flushItems() {
 		p.held = nil
 	}
 	for _, h := range p.order {
-		p.result(p.items[h])
+		r := p.items[h]
+		if r.status == events.StatusFailed || r.status == events.StatusIgnored {
+			r.msg = loopFailedMsg
+		}
+		p.result(r)
 	}
 	clear(p.items)
-	p.order, p.lastBad = nil, ""
+	clear(p.included)
+	p.order = nil
 }
 
 var recapRE = regexp.MustCompile(`^(\S+)\s+:\s+(ok=\d+.*)$`)

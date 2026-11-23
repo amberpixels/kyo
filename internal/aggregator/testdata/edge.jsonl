@@ -1,0 +1,23 @@
+{"v": 1, "ev": "playbook", "t": 1795434966.652, "file": "edge.yml", "check": false, "diff": true}
+{"v": 1, "ev": "play", "t": 1795434966.653, "name": "Edge", "uuid": "02000000-0000-8321-65f4-000000000003", "tasks": 4, "hosts": ["web-1", "web-2"]}
+{"v": 1, "ev": "task", "t": 1795434966.656, "name": "Include per item", "role": "", "action": "ansible.builtin.include_tasks", "uuid": "02000000-0000-8321-65f4-000000000005"}
+{"v": 1, "ev": "result", "t": 1795434966.667, "host": "web-1", "uuid": "02000000-0000-8321-65f4-000000000005", "status": "ok", "msg": "All items completed"}
+{"v": 1, "ev": "result", "t": 1795434966.67, "host": "web-2", "uuid": "02000000-0000-8321-65f4-000000000005", "status": "ok", "msg": "All items completed"}
+{"v": 1, "ev": "include", "t": 1795434966.672, "file": "included.yml", "hosts": ["web-1", "web-2"], "tasks": 1}
+{"v": 1, "ev": "include", "t": 1795434966.673, "file": "included.yml", "hosts": ["web-1", "web-2"], "tasks": 1}
+{"v": 1, "ev": "task", "t": 1795434966.673, "name": "Included task", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-8321-65f4-000000000031"}
+{"v": 1, "ev": "result", "t": 1795434966.683, "host": "web-1", "uuid": "02000000-0000-8321-65f4-000000000031", "status": "ok", "msg": "included"}
+{"v": 1, "ev": "result", "t": 1795434966.684, "host": "web-2", "uuid": "02000000-0000-8321-65f4-000000000031", "status": "ok", "msg": "included"}
+{"v": 1, "ev": "task", "t": 1795434966.685, "name": "Included task", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-8321-65f4-000000000035"}
+{"v": 1, "ev": "result", "t": 1795434966.694, "host": "web-1", "uuid": "02000000-0000-8321-65f4-000000000035", "status": "ok", "msg": "included"}
+{"v": 1, "ev": "result", "t": 1795434966.696, "host": "web-2", "uuid": "02000000-0000-8321-65f4-000000000035", "status": "ok", "msg": "included"}
+{"v": 1, "ev": "task", "t": 1795434966.697, "name": "Fail per item, ignored", "role": "", "action": "ansible.builtin.fail", "uuid": "02000000-0000-8321-65f4-000000000006"}
+{"v": 1, "ev": "result", "t": 1795434966.713, "host": "web-1", "uuid": "02000000-0000-8321-65f4-000000000006", "status": "ignored", "msg": "One or more items failed"}
+{"v": 1, "ev": "result", "t": 1795434966.715, "host": "web-2", "uuid": "02000000-0000-8321-65f4-000000000006", "status": "ignored", "msg": "One or more items failed"}
+{"v": 1, "ev": "task", "t": 1795434966.716, "name": "Fail with an empty line, ignored", "role": "", "action": "ansible.builtin.shell", "uuid": "02000000-0000-8321-65f4-000000000007"}
+{"v": 1, "ev": "result", "t": 1795434966.957, "host": "web-1", "uuid": "02000000-0000-8321-65f4-000000000007", "status": "ignored", "msg": "The command exited with a non-zero return code."}
+{"v": 1, "ev": "result", "t": 1795434966.958, "host": "web-2", "uuid": "02000000-0000-8321-65f4-000000000007", "status": "ignored", "msg": "The command exited with a non-zero return code."}
+{"v": 1, "ev": "task", "t": 1795434966.958, "name": "Skip every item", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-8321-65f4-000000000008"}
+{"v": 1, "ev": "result", "t": 1795434966.968, "host": "web-1", "uuid": "02000000-0000-8321-65f4-000000000008", "status": "skipped", "msg": "All items skipped"}
+{"v": 1, "ev": "result", "t": 1795434966.97, "host": "web-2", "uuid": "02000000-0000-8321-65f4-000000000008", "status": "skipped", "msg": "All items skipped"}
+{"v": 1, "ev": "stats", "t": 1795434966.971, "hosts": {"web-1": {"ok": 6, "failures": 0, "unreachable": 0, "changed": 0, "skipped": 1, "rescued": 0, "ignored": 2}, "web-2": {"ok": 6, "failures": 0, "unreachable": 0, "changed": 0, "skipped": 1, "rescued": 0, "ignored": 2}}}

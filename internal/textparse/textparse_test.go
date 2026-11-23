@@ -82,7 +82,7 @@ ok: [web-2] => (item=c)
 TASK [Next] ****
 ok: [web-1]
 `,
-			want: []string{"Loop|web-1|changed|", "Loop|web-2|failed|item b broke", "Next|web-1|ok|"},
+			want: []string{"Loop|web-1|changed|", "Loop|web-2|failed|One or more items failed", "Next|web-1|ok|"},
 		},
 		{
 			name: "...ignoring after failed items",
@@ -92,7 +92,7 @@ TASK [Loop] ****
 failed: [web-1] (item=a) => {"msg": "no"}
 ...ignoring
 `,
-			want: []string{"Loop|web-1|ignored|no"},
+			want: []string{"Loop|web-1|ignored|One or more items failed"},
 		},
 		{
 			name: "multi-line JSON with braces in strings",
@@ -154,6 +154,63 @@ FAILED - RETRYING: [web-1]: Write (3 retries left).
 changed: [web-1]
 `,
 			want: []string{"Write|web-1|changed|"},
+		},
+		{
+			name: "...ignoring after interleaved hosts' items ignores both",
+			text: `
+PLAY [Base] ****
+TASK [Loop] ****
+failed: [web-1] (item=1) => {"msg": "no"}
+failed: [web-1] (item=2) => {"msg": "no"}
+failed: [web-2] (item=1) => {"msg": "no"}
+...ignoring
+failed: [web-2] (item=2) => {"msg": "no"}
+...ignoring
+`,
+			want: []string{
+				"Loop|web-1|ignored|One or more items failed",
+				"Loop|web-2|ignored|One or more items failed",
+			},
+		},
+		{
+			name: "a blank line inside a YAML body keeps the body open",
+			text: `
+PLAY [Base] ****
+TASK [Shell] ****
+fatal: [web-1]: FAILED! => 
+    changed: true
+    msg: non-zero return code
+    stdout: |-
+        one
+
+        two
+...ignoring
+
+TASK [Next] ****
+ok: [web-1]
+`,
+			want: []string{"Shell|web-1|ignored|non-zero return code", "Next|web-1|ok|"},
+		},
+		{
+			name: "a looped include names its item after the hosts",
+			text: `
+PLAY [Base] ****
+TASK [Include] ****
+included: /src/inc.yml for web-1, web-2 => (item=a)
+included: /src/inc.yml for web-1, web-2 => (item=b)
+`,
+			want: []string{"Include|web-1|ok|", "Include|web-2|ok|"},
+		},
+		{
+			name: "a fully skipped loop's own line folds into its items",
+			text: `
+PLAY [Base] ****
+TASK [Skip] ****
+skipping: [web-1] => (item=1)
+skipping: [web-1] => (item=2)
+skipping: [web-1]
+`,
+			want: []string{"Skip|web-1|skipped|"},
 		},
 		{
 			name: "an include is an ok result per host",

@@ -1,0 +1,28 @@
+# Layouts the default callback's text prints in ways that are easy to misread:
+# a looped include, a looped failure ignored on both hosts, an ignored failure
+# whose output has an empty line, and a loop that skips every item.
+# Runs with -i testdata/inventory.ini; it writes nothing.
+- name: Edge
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Include per item
+      ansible.builtin.include_tasks: included.yml
+      loop: [a, b]
+
+    - name: Fail per item, ignored
+      ansible.builtin.fail:
+        msg: "item {{ item }} failed"
+      loop: [1, 2]
+      ignore_errors: true
+
+    - name: Fail with an empty line, ignored
+      ansible.builtin.shell: "printf 'one\\n\\ntwo\\n'; exit 1"
+      changed_when: false
+      ignore_errors: true
+
+    - name: Skip every item
+      ansible.builtin.debug:
+        msg: "{{ item }}"
+      loop: [1, 2]
+      when: false

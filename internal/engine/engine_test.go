@@ -172,3 +172,39 @@ func TestRunNoPlugin(t *testing.T) {
 		t.Errorf("kyo's variables reached ansible:\n%s", log)
 	}
 }
+
+// TestRunNoPluginOtherCallback: with KYO_NO_PLUGIN and a stdout callback whose
+// text kyo doesn't parse, there is no view, so kyo says so instead of an empty
+// summary.
+func TestRunNoPluginOtherCallback(t *testing.T) {
+	if _, err := exec.LookPath("ansible-playbook"); err != nil {
+		t.Skip("ansible-playbook not on PATH")
+	}
+	project := t.TempDir()
+	write(t, filepath.Join(project, "site.yml"), `- hosts: all
+  gather_facts: false
+  tasks:
+    - ansible.builtin.debug: {msg: hi}
+`)
+	var stderr bytes.Buffer
+	code, err := Run(context.Background(), Options{
+		Args: []string{"-i", "localhost,", "-c", "local", "site.yml"},
+		Env: []string{
+			"PATH=" + os.Getenv("PATH"),
+			"HOME=" + os.Getenv("HOME"),
+			"KYO_LOG=" + filepath.Join(project, "run.log"),
+			"KYO_NO_PLUGIN=1",
+			"ANSIBLE_STDOUT_CALLBACK=minimal",
+			"ANSIBLE_LOCALHOST_WARNING=false",
+			"ANSIBLE_PYTHON_INTERPRETER=auto_silent",
+		},
+		Dir:    project,
+		Stderr: &stderr,
+	})
+	if err != nil || code != 0 {
+		t.Fatalf("code %d, err %v, stderr:\n%s", code, err, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "KYO_NO_PLUGIN is set, and the output is not the default callback's") {
+		t.Errorf("summary:\n%s", stderr.String())
+	}
+}

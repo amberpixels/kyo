@@ -1,0 +1,115 @@
+
+PLAY [Edge] ********************************************************************
+
+TASK [Include per item] ********************************************************
+included: testdata/playbooks/included.yml for web-1, web-2 => (item=a)
+included: testdata/playbooks/included.yml for web-1, web-2 => (item=b)
+
+TASK [Included task] ***********************************************************
+ok: [web-1] => 
+    msg: included
+ok: [web-2] => 
+    msg: included
+
+TASK [Included task] ***********************************************************
+ok: [web-1] => 
+    msg: included
+ok: [web-2] => 
+    msg: included
+
+TASK [Fail per item, ignored] **************************************************
+[ERROR]: Task failed: Action failed: item 1 failed
+Origin: testdata/playbooks/edge.yml:13:7
+
+11       loop: [a, b]
+12
+13     - name: Fail per item, ignored
+         ^ column 7
+
+failed: [web-1] (item=1) => 
+    ansible_loop_var: item
+    changed: false
+    item: 1
+    msg: item 1 failed
+[ERROR]: Task failed: Action failed: item 2 failed
+Origin: testdata/playbooks/edge.yml:13:7
+
+11       loop: [a, b]
+12
+13     - name: Fail per item, ignored
+         ^ column 7
+
+failed: [web-1] (item=2) => 
+    ansible_loop_var: item
+    changed: false
+    item: 2
+    msg: item 2 failed
+failed: [web-2] (item=1) => 
+    ansible_loop_var: item
+    changed: false
+    item: 1
+    msg: item 1 failed
+...ignoring
+failed: [web-2] (item=2) => 
+    ansible_loop_var: item
+    changed: false
+    item: 2
+    msg: item 2 failed
+...ignoring
+
+TASK [Fail with an empty line, ignored] ****************************************
+[ERROR]: Task failed: Module failed: The command exited with a non-zero return code.
+Origin: testdata/playbooks/edge.yml:19:7
+
+17       ignore_errors: true
+18
+19     - name: Fail with an empty line, ignored
+         ^ column 7
+
+fatal: [web-2]: FAILED! => 
+    changed: false
+    changed_when_result: false
+    cmd: printf 'one\n\ntwo\n'; exit 1
+    delta: '0:00:00.006693'
+    end: '2026-11-23 13:56:07.524569'
+    msg: The command exited with a non-zero return code.
+    rc: 1
+    start: '2026-11-23 13:56:07.517876'
+    stderr: ''
+    stderr_lines: <omitted>
+    stdout: |-
+        one
+
+        two
+    stdout_lines: <omitted>
+...ignoring
+fatal: [web-1]: FAILED! => 
+    changed: false
+    changed_when_result: false
+    cmd: printf 'one\n\ntwo\n'; exit 1
+    delta: '0:00:00.007562'
+    end: '2026-11-23 13:56:07.524350'
+    msg: The command exited with a non-zero return code.
+    rc: 1
+    start: '2026-11-23 13:56:07.516788'
+    stderr: ''
+    stderr_lines: <omitted>
+    stdout: |-
+        one
+
+        two
+    stdout_lines: <omitted>
+...ignoring
+
+TASK [Skip every item] *********************************************************
+skipping: [web-1] => (item=1) 
+skipping: [web-1] => (item=2) 
+skipping: [web-2] => (item=1) 
+skipping: [web-2] => (item=2) 
+skipping: [web-1]
+skipping: [web-2]
+
+PLAY RECAP *********************************************************************
+web-1                      : ok=6    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=2   
+web-2                      : ok=6    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=2   
+

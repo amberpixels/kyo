@@ -131,13 +131,17 @@ func Run(ctx context.Context, opt Options) (int, error) {
 	view.end(snap, elapsed)
 
 	if src == source.None {
-		fmt.Fprintf(
-			opt.Stderr,
-			"kyo: no events from the callback plugin, and the output is not the default callback's; "+
-				"the run's output is in %s\n",
-			logPath,
-		)
+		why := "no events from the callback plugin"
+		if noPlugin {
+			why = "KYO_NO_PLUGIN is set"
+		}
+		fmt.Fprintf(opt.Stderr, "kyo: %s, and the output is not the default callback's; the run's output is in %s\n",
+			why, logPath)
 		return res.ExitCode, nil
+	}
+	late := sw.Dropped()
+	if late > 0 {
+		fmt.Fprintf(logf, "kyo: the callback plugin answered after the text was chosen; %d events ignored\n", late)
 	}
 	width, height := render.Size(opt.Stderr)
 	if height == 0 {
@@ -152,10 +156,11 @@ func Run(ctx context.Context, opt Options) (int, error) {
 	})
 	switch src {
 	case source.Text:
-		fmt.Fprintln(
-			opt.Stderr,
-			"  read from the default callback's output: the callback plugin sent no events (no task totals or diff sizes)",
-		)
+		why := "the callback plugin sent no events"
+		if late > 0 {
+			why = "the callback plugin answered too late"
+		}
+		fmt.Fprintf(opt.Stderr, "  read from the default callback's output: %s (no task totals or diff sizes)\n", why)
 	case source.TextForce:
 		fmt.Fprintln(
 			opt.Stderr,

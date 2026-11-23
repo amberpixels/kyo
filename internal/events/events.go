@@ -64,19 +64,23 @@ type Event struct {
 	// play, task
 	Name    string `json:"name,omitempty"`
 	UUID    string `json:"uuid,omitempty"`
-	Tasks   int    `json:"tasks,omitempty"` // play: real static task count; -1 unknown
 	Role    string `json:"role,omitempty"`
 	Action  string `json:"action,omitempty"`
 	Handler bool   `json:"handler,omitempty"`
 
-	// include
+	// play, include: Tasks is the real task count (play: static and
+	// tag-filtered; include: the included file's). Nil or -1 means unknown, so
+	// an older plugin that omits it reads the same as one that couldn't count.
+	Tasks *int `json:"tasks,omitempty"`
+	// play: its resolved hosts (this serial batch); include: the hosts it ran for
 	Hosts []string `json:"hosts,omitempty"`
 
 	// result
 	Host         string    `json:"host,omitempty"`
 	Status       Status    `json:"status,omitempty"`
 	Msg          string    `json:"msg,omitempty"`
-	DiffStat     *DiffStat `json:"-"` // wire key "diff"
+	Rescued      bool      `json:"rescued,omitempty"` // a failure a rescue section catches
+	DiffStat     *DiffStat `json:"-"`                 // wire key "diff"
 	Warnings     []string  `json:"warnings,omitempty"`
 	Deprecations []string  `json:"deprecations,omitempty"`
 
@@ -87,10 +91,18 @@ type Event struct {
 	Recap map[string]HostStats `json:"-"` // wire key "hosts"
 }
 
+// TaskCount returns Tasks and whether it is known.
+func (ev Event) TaskCount() (int, bool) {
+	if ev.Tasks == nil || *ev.Tasks < 0 {
+		return 0, false
+	}
+	return *ev.Tasks, true
+}
+
 // Decode parses one line from the plugin.
 func Decode(line []byte) (Event, error) {
 	// "diff" is a bool on playbook events and an object on result events;
-	// "hosts" is a list on include events and a map on stats events. Both are
+	// "hosts" is a list on play and include events and a map on stats events. Both are
 	// held raw and resolved by kind.
 	var ev Event
 	type plain Event

@@ -3,3 +3,7 @@
     dest: "{{ lookup('env', 'KYO_TEST_DIR') }}/{{ inventory_hostname }}-app.conf"
     content: "port: 8080\n"
   notify: Restart app
+
+- name: Check the app
+  ansible.builtin.debug:
+    msg: app ok

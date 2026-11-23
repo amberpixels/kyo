@@ -32,17 +32,9 @@ diff sizes, structured warnings.
 Other stdout callbacks (`minimal`, `dense`, custom ones) aren't parsed: kyo says
 the view is unavailable and keeps the raw log, as today.
 
-## Open question: ansible.posix.jsonl as a middle tier
+## Not doing: ansible.posix.jsonl
 
-Proposed by the user: when the `ansible.posix` collection is installed, run with
-`ANSIBLE_STDOUT_CALLBACK=ansible.posix.jsonl` and parse that instead of text.
-Checked against ansible.posix 1.6.2:
-
-- It is a `stdout` callback (`CALLBACK_TYPE = 'stdout'`), so using it replaces
-  the user's own output: the raw log becomes JSON instead of what they'd see
-- Its format belongs to the collection and can change with collection releases
-- It is loaded through the same callback machinery as kyo's own plugin, so most
-  conditions that break the plugin break it too. It only helps where kyo can't
-  write or point to its plugin dir but the collection is installed
-
-Decide whether that case is worth a third parser before building it.
+Considered and dropped. It is a `stdout` callback, so it would replace the
+user's own output (the raw log turns into JSON), its format belongs to a
+collection we don't control, and it loads through the same machinery as kyo's
+plugin, so it rarely works where ours doesn't.

@@ -56,6 +56,15 @@ func TestDecodeKinds(t *testing.T) {
 			},
 		},
 		{
+			"result with diff text",
+			`{"v":1,"ev":"result","host":"web-1","uuid":"u2","status":"changed","diff":{"added":1,"removed":0},"diff_text":"--- before\n+++ after\n+x"}`,
+			func(t *testing.T, ev Event) {
+				if ev.DiffText != "--- before\n+++ after\n+x" || ev.DiffStat == nil {
+					t.Fatalf("got %+v", ev)
+				}
+			},
+		},
+		{
 			"include",
 			`{"v":1,"ev":"include","file":"extra.yml","hosts":["web-1","web-2"],"tasks":0}`,
 			func(t *testing.T, ev Event) {

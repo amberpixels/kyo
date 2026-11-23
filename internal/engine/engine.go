@@ -1,8 +1,8 @@
 // Package engine wires a run together: install the callback plugin, point
 // ansible at it without losing the user's plugin path, run the playbook with
 // its output going to the raw log while the aggregator reads its events and
-// stderr, and print a recap from the aggregator's snapshot. The live view and
-// the summaries (issues 007, 008) read the same snapshot.
+// stderr, show its progress (a repainted block on a terminal, milestone lines
+// elsewhere), and print the plan or apply summary from the final snapshot.
 package engine
 
 import (
@@ -14,13 +14,24 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/amberpixels/kyo/internal/aggregator"
 	"github.com/amberpixels/kyo/internal/ansiblecfg"
 	"github.com/amberpixels/kyo/internal/callback"
+	"github.com/amberpixels/kyo/internal/render"
 	"github.com/amberpixels/kyo/internal/runner"
 )
+
+// Repaint cadence on a terminal, and how often plain mode checks for a
+// milestone.
+const (
+	tickInterval  = 100 * time.Millisecond
+	plainInterval = time.Second
+)
+
+var spinner = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
 // passthroughFlags make ansible-playbook print something and exit without
 // running a play, so kyo has nothing to add.
@@ -70,6 +81,9 @@ func Run(ctx context.Context, opt Options) (int, error) {
 
 	agg := aggregator.New(opt.Now)
 	start := opt.Now()
+	view := startView(opt, agg, start)
+	defer view.close() // restore the cursor even on a panic; idempotent
+
 	res, err := runner.Run(ctx, runner.Options{
 		Command:  getenv(opt.Env, "KYO_ANSIBLE_PLAYBOOK"),
 		Args:     opt.Args,
@@ -79,48 +93,143 @@ func Run(ctx context.Context, opt Options) (int, error) {
 		OnEvent:  agg.Feed,
 		OnStderr: agg.Stderr,
 	})
+	view.stop()
 	if err != nil {
+		view.clear()
 		return 1, err
 	}
 	agg.Finish(opt.Now())
+	snap, elapsed := agg.Snapshot(), opt.Now().Sub(start)
+	view.end(snap, elapsed)
 
-	printRecap(opt.Stderr, agg.Snapshot(), res, logPath, opt.Now().Sub(start))
+	if res.Events == 0 {
+		fmt.Fprintf(opt.Stderr, "kyo: no events from the callback plugin; the run's output is in %s\n", logPath)
+		return res.ExitCode, nil
+	}
+	width, height := render.Size(opt.Stderr)
+	if height == 0 {
+		width = 0 // not a terminal: lines stay whole
+	}
+	render.Summary(opt.Stderr, snap, render.SummaryOpts{
+		LogPath:   logPath,
+		Elapsed:   elapsed,
+		Width:     width,
+		ArgsCheck: argsCheck(opt.Args),
+		Styles:    render.NewStyles(opt.Stderr, opt.Env),
+	})
 	return res.ExitCode, nil
 }
 
-// printRecap is a one-screen stand-in until the plan/apply summary (issue 008).
-func printRecap(w io.Writer, s aggregator.Snapshot, res *runner.Result, logPath string, elapsed time.Duration) {
-	if res.Events == 0 {
-		fmt.Fprintf(w, "kyo: no events from the callback plugin; the run's output is in %s\n", logPath)
-		return
-	}
-	mode, verb := "apply", "changed"
-	if s.Check {
-		mode, verb = "plan", "would change"
+// view shows the run's progress while it runs: a block repainted in place on
+// a terminal, or milestone lines in plain mode.
+type view struct {
+	w     io.Writer
+	live  *render.Live          // nil in plain mode
+	plain *render.PlainProgress // nil on a terminal
+	done  chan struct{}
+	wg    sync.WaitGroup
+	once  sync.Once
+}
+
+func startView(opt Options, agg *aggregator.Aggregator, start time.Time) *view {
+	v := &view{w: opt.Stderr, done: make(chan struct{})}
+	styles := render.NewStyles(opt.Stderr, opt.Env)
+	check := argsCheck(opt.Args)
+
+	if render.Plain(opt.Stderr, opt.Env) {
+		v.plain = render.NewPlainProgress(opt.Stderr, styles, check)
+		v.wg.Go(func() {
+			t := time.NewTicker(plainInterval)
+			defer t.Stop()
+			for {
+				select {
+				case <-v.done:
+					return
+				case <-t.C:
+					v.plain.Update(agg.Snapshot(), opt.Now().Sub(start))
+				}
+			}
+		})
+		return v
 	}
 
-	hostsChanged := 0
-	for _, h := range s.Hosts {
-		if h.Changed > 0 {
-			hostsChanged++
+	v.live = render.NewLive(opt.Stderr)
+	fo := render.Opts{ArgsCheck: check, Styles: styles}
+	v.wg.Go(func() {
+		t := time.NewTicker(tickInterval)
+		defer t.Stop()
+		for i := 0; ; i++ {
+			select {
+			case <-v.done:
+				return
+			case <-t.C:
+				snap := agg.Snapshot()
+				// Nothing is painted before the first play, so a vault or
+				// become password prompt has the terminal to itself.
+				if len(snap.Plays) == 0 {
+					continue
+				}
+				fo.Spinner = spinner[i%len(spinner)]
+				fo.Elapsed = opt.Now().Sub(start)
+				// Measured every tick: the block has to fit the terminal as it
+				// is now, and one row short of it, or each repaint scrolls the
+				// screen and strands a copy of the block's top line.
+				w, h := render.Size(opt.Stderr)
+				fo.Width, fo.MaxLines = w, max(h-1, 0)
+				v.live.Render(render.Frame(snap, fo))
+			}
+		}
+	})
+	return v
+}
+
+// stop halts the ticker; the view's writer is the caller's from then on.
+func (v *view) stop() {
+	v.once.Do(func() { close(v.done) })
+	v.wg.Wait()
+}
+
+// end takes the view down for the summary: the block is cleared so the
+// summary prints in its place, and plain mode prints its last milestones.
+func (v *view) end(s aggregator.Snapshot, elapsed time.Duration) {
+	if v.plain != nil {
+		v.plain.Update(s, elapsed)
+	}
+	v.clear()
+}
+
+func (v *view) clear() {
+	if v.live != nil {
+		v.live.Clear()
+		v.live.Close()
+	}
+}
+
+// close restores the cursor. Safe after clear.
+func (v *view) close() {
+	if v.live != nil {
+		v.live.Close()
+	}
+}
+
+// argsCheck reports --check in ansible-playbook's args, the fallback for when
+// the plugin's playbook event never came. A short cluster counts only when
+// every letter is a flag that takes no value, so "-eC=1" is not a check.
+func argsCheck(args []string) bool {
+	for _, a := range args {
+		switch {
+		case a == "--":
+			return false
+		case a == "--check":
+			return true
+		case len(a) > 1 && a[0] == '-' && a[1] != '-':
+			flags := a[1:]
+			if strings.ContainsRune(flags, 'C') && strings.Trim(flags, "vCDKkb") == "" {
+				return true
+			}
 		}
 	}
-	fmt.Fprintf(w, "%s %s: %d %s on %d of %d hosts", mode, s.File, s.Totals.Changed, verb, hostsChanged, len(s.Hosts))
-	if s.Totals.Failed > 0 {
-		fmt.Fprintf(w, ", %d failed", s.Totals.Failed)
-	}
-	if s.Totals.Unreachable > 0 {
-		fmt.Fprintf(w, ", %d unreachable", s.Totals.Unreachable)
-	}
-	fmt.Fprintf(w, "  (%s)\n", elapsed.Round(100*time.Millisecond))
-	for _, h := range s.Hosts {
-		fmt.Fprintf(w, "  %-24s ok %-4d changed %-4d skipped %-4d failed %-4d unreachable %-4d ignored %d\n",
-			h.Host, h.OK, h.Changed, h.Skipped, h.Failed, h.Unreachable, h.Ignored)
-	}
-	if s.WarnTotal > 0 {
-		fmt.Fprintf(w, "warnings %d (%d deprecation)\n", s.WarnTotal, s.Deprecations)
-	}
-	fmt.Fprintf(w, "raw log: %s\n", logPath)
+	return false
 }
 
 func wantPassthrough(args, env []string) bool {

@@ -1,0 +1,6 @@
+kyo · site.yml · plan (--check) · 2 hosts
+kyo · ✗ web-1 · [nginx] Write the site config: Destination directory does not exist
+kyo · ✓ Base 6/6 in 0:04 · ok 2 changed 3 failed 1
+kyo · ! web-1 unreachable · Drain: ssh: connect to host web-1 port 22: Connection refused
+kyo · ✓ Rolling 3/4 in 0:03 · ok 4 changed 3 failed 1
+kyo · ok 4 changed 3 failed 1 · 0:45

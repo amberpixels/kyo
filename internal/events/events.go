@@ -79,8 +79,9 @@ type Event struct {
 	Host         string    `json:"host,omitempty"`
 	Status       Status    `json:"status,omitempty"`
 	Msg          string    `json:"msg,omitempty"`
-	Rescued      bool      `json:"rescued,omitempty"` // a failure a rescue section catches
-	DiffStat     *DiffStat `json:"-"`                 // wire key "diff"
+	Rescued      bool      `json:"rescued,omitempty"`   // a failure a rescue section catches
+	DiffStat     *DiffStat `json:"-"`                   // wire key "diff"
+	DiffText     string    `json:"diff_text,omitempty"` // the unified diff, under --diff only
 	Warnings     []string  `json:"warnings,omitempty"`
 	Deprecations []string  `json:"deprecations,omitempty"`
 

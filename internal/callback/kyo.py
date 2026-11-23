@@ -5,8 +5,10 @@
 # so a stale copy on a plugin path is harmless.
 from __future__ import annotations
 
+import copy
 import json
 import os
+import re
 import time
 
 from ansible import context
@@ -22,6 +24,9 @@ description:
 
 PROTOCOL = 1
 MSG_LIMIT = 2000
+DIFF_TEXT_LINES = 200  # per result; the raw log keeps the whole diff
+
+_ANSI = re.compile(r'\x1b\[[0-9;]*m')
 
 
 def _host(result):
@@ -144,6 +149,20 @@ def _diff_stats(diffs):
     return {'added': added, 'removed': removed}
 
 
+def _diff_list(diffs):
+    """Flattens a result's diff, a dict or a list of them, into a list of dicts."""
+    if isinstance(diffs, dict):
+        diffs = [diffs]
+    return [d for d in diffs or [] if isinstance(d, dict)]
+
+
+def _cap_lines(text, limit):
+    lines = text.splitlines()
+    if len(lines) <= limit:
+        return '\n'.join(lines)
+    return '\n'.join(lines[:limit] + ['... %d more lines' % (len(lines) - limit)])
+
+
 class CallbackModule(CallbackBase):
     CALLBACK_VERSION = 2.0
     CALLBACK_TYPE = 'aggregate'
@@ -153,6 +172,7 @@ class CallbackModule(CallbackBase):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._out = None
+        self._diff_text = False  # --diff: results carry the diff text too
         fd = os.environ.get('KYO_FD')
         if not fd:
             return
@@ -177,6 +197,7 @@ class CallbackModule(CallbackBase):
 
     def v2_playbook_on_start(self, playbook):
         args = context.CLIARGS
+        self._diff_text = bool(args.get('diff'))
         self._emit('playbook', file=os.path.basename(getattr(playbook, '_file_name', '') or ''),
                    check=bool(args.get('check')), diff=bool(args.get('diff')))
 
@@ -215,18 +236,37 @@ class CallbackModule(CallbackBase):
             msg = data.get('msg')
             if msg:
                 fields['msg'] = str(msg)[:MSG_LIMIT]
+            diffs = None
             if 'diff' in data:
-                fields['diff'] = _diff_stats(data['diff'])
+                diffs = _diff_list(data['diff'])
             elif isinstance(data.get('results'), list):
                 items = [r.get('diff') for r in data['results']
                          if isinstance(r, dict) and 'diff' in r and not r.get('_ansible_no_log')]
                 if items:
-                    fields['diff'] = _diff_stats([d for i in items for d in (i if isinstance(i, list) else [i])])
+                    diffs = [d for i in items for d in _diff_list(i)]
+            if diffs is not None:
+                fields['diff'] = _diff_stats(diffs)
+                if self._diff_text:
+                    text = self._render_diff(diffs)
+                    if text:
+                        fields['diff_text'] = text
         for key in ('warnings', 'deprecations'):
             if data.get(key):
                 fields[key] = [w if isinstance(w, str) else (w.get('msg') if isinstance(w, dict) else str(w))
                                for w in data[key]]
         self._emit('result', **fields)
+
+    def _render_diff(self, diffs):
+        """The diff as the default callback prints it, without color, capped.
+
+        _get_diff rewrites mapping before/after values in place, so it gets a
+        copy: the stdout callback formats the same result after this one.
+        """
+        try:
+            text = self._get_diff(copy.deepcopy(diffs))
+        except Exception:  # noqa: BLE001 - the counts still go out
+            return ''
+        return _cap_lines(_ANSI.sub('', text).rstrip('\n'), DIFF_TEXT_LINES)
 
     def v2_runner_on_ok(self, result):
         self._result('changed' if _data(result).get('changed') else 'ok', result)

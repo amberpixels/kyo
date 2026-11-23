@@ -226,6 +226,7 @@ func (a *Aggregator) result(ev events.Event) {
 		}
 		a.changes = append(a.changes, Change{
 			Play: playName, Host: ev.Host, Task: t.name, Role: t.role, Handler: t.handler, Diff: diff,
+			DiffText: ev.DiffText,
 		})
 	case events.StatusFailed:
 		a.failures = append(a.failures, f)

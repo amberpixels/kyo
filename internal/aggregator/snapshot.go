@@ -89,6 +89,7 @@ type Change struct {
 	Play, Host, Task, Role string
 	Handler                bool
 	Diff                   *events.DiffStat // nil when the result carried no diff
+	DiffText               string           // the diff itself, under --diff only
 }
 
 // Failure is a failed, ignored or unreachable result.

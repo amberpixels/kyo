@@ -1,38 +1,38 @@
-{"v": 1, "ev": "playbook", "t": 1795432016.259, "file": "basic.yml", "check": false, "diff": true}
-{"v": 1, "ev": "play", "t": 1795432016.26, "name": "Basic", "uuid": "02000000-0000-09b3-c04d-000000000003", "tasks": 7, "hosts": ["web-1", "web-2"]}
-{"v": 1, "ev": "task", "t": 1795432016.262, "name": "Write a file", "role": "", "action": "ansible.builtin.copy", "uuid": "02000000-0000-09b3-c04d-000000000005"}
-{"v": 1, "ev": "result", "t": 1795432016.803, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-000000000005", "status": "changed", "diff": {"added": 1, "removed": 0}}
-{"v": 1, "ev": "result", "t": 1795432016.804, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-000000000005", "status": "changed", "diff": {"added": 1, "removed": 0}}
-{"v": 1, "ev": "task", "t": 1795432016.804, "name": "Never runs", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-09b3-c04d-000000000006"}
-{"v": 1, "ev": "result", "t": 1795432016.81, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-000000000006", "status": "skipped"}
-{"v": 1, "ev": "result", "t": 1795432016.811, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-000000000006", "status": "skipped"}
-{"v": 1, "ev": "task", "t": 1795432016.812, "name": "Loop", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-09b3-c04d-000000000007"}
-{"v": 1, "ev": "result", "t": 1795432016.822, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-000000000007", "status": "ok", "msg": "All items completed"}
-{"v": 1, "ev": "result", "t": 1795432016.823, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-000000000007", "status": "ok", "msg": "All items completed"}
-{"v": 1, "ev": "task", "t": 1795432016.824, "name": "Fail but carry on", "role": "", "action": "ansible.builtin.fail", "uuid": "02000000-0000-09b3-c04d-000000000008"}
-{"v": 1, "ev": "result", "t": 1795432016.831, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-000000000008", "status": "ignored", "msg": "expected failure"}
-{"v": 1, "ev": "result", "t": 1795432016.833, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-000000000008", "status": "ignored", "msg": "expected failure"}
-{"v": 1, "ev": "task", "t": 1795432016.833, "name": "Secret", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-09b3-c04d-000000000009"}
-{"v": 1, "ev": "result", "t": 1795432016.84, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-000000000009", "status": "ok"}
-{"v": 1, "ev": "result", "t": 1795432016.841, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-000000000009", "status": "ok"}
-{"v": 1, "ev": "task", "t": 1795432016.842, "name": "Include more", "role": "", "action": "ansible.builtin.include_tasks", "uuid": "02000000-0000-09b3-c04d-00000000000a"}
-{"v": 1, "ev": "result", "t": 1795432016.848, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-00000000000a", "status": "ok"}
-{"v": 1, "ev": "result", "t": 1795432016.85, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-00000000000a", "status": "ok"}
-{"v": 1, "ev": "include", "t": 1795432016.852, "file": "included.yml", "hosts": ["web-1", "web-2"], "tasks": 1}
-{"v": 1, "ev": "task", "t": 1795432016.852, "name": "Included task", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-09b3-c04d-000000000048"}
-{"v": 1, "ev": "result", "t": 1795432016.859, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-000000000048", "status": "ok", "msg": "included"}
-{"v": 1, "ev": "result", "t": 1795432016.86, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-000000000048", "status": "ok", "msg": "included"}
-{"v": 1, "ev": "task", "t": 1795432016.861, "name": "Include the app role", "role": "", "action": "ansible.builtin.include_role", "uuid": "02000000-0000-09b3-c04d-00000000000b"}
-{"v": 1, "ev": "result", "t": 1795432016.867, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-00000000000b", "status": "ok"}
-{"v": 1, "ev": "result", "t": 1795432016.868, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-00000000000b", "status": "ok"}
-{"v": 1, "ev": "include", "t": 1795432016.873, "file": "app", "hosts": ["web-1", "web-2"], "tasks": -1}
-{"v": 1, "ev": "task", "t": 1795432016.873, "name": "app : Configure app", "role": "app", "action": "ansible.builtin.copy", "uuid": "02000000-0000-09b3-c04d-000000000079"}
-{"v": 1, "ev": "result", "t": 1795432017.279, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-000000000079", "status": "changed", "diff": {"added": 1, "removed": 0}}
-{"v": 1, "ev": "result", "t": 1795432017.279, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-000000000079", "status": "changed", "diff": {"added": 1, "removed": 0}}
-{"v": 1, "ev": "task", "t": 1795432017.28, "name": "app : Check the app", "role": "app", "action": "ansible.builtin.debug", "uuid": "02000000-0000-09b3-c04d-00000000007a"}
-{"v": 1, "ev": "result", "t": 1795432017.287, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-00000000007a", "status": "ok", "msg": "app ok"}
-{"v": 1, "ev": "result", "t": 1795432017.288, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-00000000007a", "status": "ok", "msg": "app ok"}
-{"v": 1, "ev": "task", "t": 1795432017.29, "name": "app : Restart app", "role": "app", "action": "ansible.builtin.debug", "uuid": "02000000-0000-09b3-c04d-00000000007c", "handler": true}
-{"v": 1, "ev": "result", "t": 1795432017.297, "host": "web-1", "uuid": "02000000-0000-09b3-c04d-00000000007c", "status": "ok", "msg": "restarted"}
-{"v": 1, "ev": "result", "t": 1795432017.298, "host": "web-2", "uuid": "02000000-0000-09b3-c04d-00000000007c", "status": "ok", "msg": "restarted"}
-{"v": 1, "ev": "stats", "t": 1795432017.299, "hosts": {"web-1": {"ok": 10, "failures": 0, "unreachable": 0, "changed": 2, "skipped": 1, "rescued": 0, "ignored": 1}, "web-2": {"ok": 10, "failures": 0, "unreachable": 0, "changed": 2, "skipped": 1, "rescued": 0, "ignored": 1}}}
+{"v": 1, "ev": "playbook", "t": 1795432640.374, "file": "basic.yml", "check": false, "diff": true}
+{"v": 1, "ev": "play", "t": 1795432640.375, "name": "Basic", "uuid": "02000000-0000-4a02-7d9e-000000000003", "tasks": 7, "hosts": ["web-1", "web-2"]}
+{"v": 1, "ev": "task", "t": 1795432640.381, "name": "Write a file", "role": "", "action": "ansible.builtin.copy", "uuid": "02000000-0000-4a02-7d9e-000000000005"}
+{"v": 1, "ev": "result", "t": 1795432641.544, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-000000000005", "status": "changed", "diff": {"added": 1, "removed": 0}, "diff_text": "--- before\n+++ after: /tmp/kyo-record/web-2.txt\n@@ -0,0 +1 @@\n+hello"}
+{"v": 1, "ev": "result", "t": 1795432641.544, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-000000000005", "status": "changed", "diff": {"added": 1, "removed": 0}, "diff_text": "--- before\n+++ after: /tmp/kyo-record/web-1.txt\n@@ -0,0 +1 @@\n+hello"}
+{"v": 1, "ev": "task", "t": 1795432641.546, "name": "Never runs", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-4a02-7d9e-000000000006"}
+{"v": 1, "ev": "result", "t": 1795432641.555, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-000000000006", "status": "skipped"}
+{"v": 1, "ev": "result", "t": 1795432641.558, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-000000000006", "status": "skipped"}
+{"v": 1, "ev": "task", "t": 1795432641.559, "name": "Loop", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-4a02-7d9e-000000000007"}
+{"v": 1, "ev": "result", "t": 1795432641.579, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-000000000007", "status": "ok", "msg": "All items completed"}
+{"v": 1, "ev": "result", "t": 1795432641.582, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-000000000007", "status": "ok", "msg": "All items completed"}
+{"v": 1, "ev": "task", "t": 1795432641.583, "name": "Fail but carry on", "role": "", "action": "ansible.builtin.fail", "uuid": "02000000-0000-4a02-7d9e-000000000008"}
+{"v": 1, "ev": "result", "t": 1795432641.596, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-000000000008", "status": "ignored", "msg": "expected failure"}
+{"v": 1, "ev": "result", "t": 1795432641.6, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-000000000008", "status": "ignored", "msg": "expected failure"}
+{"v": 1, "ev": "task", "t": 1795432641.601, "name": "Secret", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-4a02-7d9e-000000000009"}
+{"v": 1, "ev": "result", "t": 1795432641.614, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-000000000009", "status": "ok"}
+{"v": 1, "ev": "result", "t": 1795432641.617, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-000000000009", "status": "ok"}
+{"v": 1, "ev": "task", "t": 1795432641.619, "name": "Include more", "role": "", "action": "ansible.builtin.include_tasks", "uuid": "02000000-0000-4a02-7d9e-00000000000a"}
+{"v": 1, "ev": "result", "t": 1795432641.63, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-00000000000a", "status": "ok"}
+{"v": 1, "ev": "result", "t": 1795432641.634, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-00000000000a", "status": "ok"}
+{"v": 1, "ev": "include", "t": 1795432641.638, "file": "included.yml", "hosts": ["web-1", "web-2"], "tasks": 1}
+{"v": 1, "ev": "task", "t": 1795432641.639, "name": "Included task", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-4a02-7d9e-000000000048"}
+{"v": 1, "ev": "result", "t": 1795432641.653, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-000000000048", "status": "ok", "msg": "included"}
+{"v": 1, "ev": "result", "t": 1795432641.656, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-000000000048", "status": "ok", "msg": "included"}
+{"v": 1, "ev": "task", "t": 1795432641.657, "name": "Include the app role", "role": "", "action": "ansible.builtin.include_role", "uuid": "02000000-0000-4a02-7d9e-00000000000b"}
+{"v": 1, "ev": "result", "t": 1795432641.669, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-00000000000b", "status": "ok"}
+{"v": 1, "ev": "result", "t": 1795432641.672, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-00000000000b", "status": "ok"}
+{"v": 1, "ev": "include", "t": 1795432641.678, "file": "app", "hosts": ["web-1", "web-2"], "tasks": -1}
+{"v": 1, "ev": "task", "t": 1795432641.678, "name": "app : Configure app", "role": "app", "action": "ansible.builtin.copy", "uuid": "02000000-0000-4a02-7d9e-000000000079"}
+{"v": 1, "ev": "result", "t": 1795432642.086, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-000000000079", "status": "changed", "diff": {"added": 1, "removed": 0}, "diff_text": "--- before\n+++ after: /tmp/kyo-record/web-1-app.conf\n@@ -0,0 +1 @@\n+port: 8080"}
+{"v": 1, "ev": "result", "t": 1795432642.087, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-000000000079", "status": "changed", "diff": {"added": 1, "removed": 0}, "diff_text": "--- before\n+++ after: /tmp/kyo-record/web-2-app.conf\n@@ -0,0 +1 @@\n+port: 8080"}
+{"v": 1, "ev": "task", "t": 1795432642.087, "name": "app : Check the app", "role": "app", "action": "ansible.builtin.debug", "uuid": "02000000-0000-4a02-7d9e-00000000007a"}
+{"v": 1, "ev": "result", "t": 1795432642.095, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-00000000007a", "status": "ok", "msg": "app ok"}
+{"v": 1, "ev": "result", "t": 1795432642.096, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-00000000007a", "status": "ok", "msg": "app ok"}
+{"v": 1, "ev": "task", "t": 1795432642.099, "name": "app : Restart app", "role": "app", "action": "ansible.builtin.debug", "uuid": "02000000-0000-4a02-7d9e-00000000007c", "handler": true}
+{"v": 1, "ev": "result", "t": 1795432642.106, "host": "web-1", "uuid": "02000000-0000-4a02-7d9e-00000000007c", "status": "ok", "msg": "restarted"}
+{"v": 1, "ev": "result", "t": 1795432642.107, "host": "web-2", "uuid": "02000000-0000-4a02-7d9e-00000000007c", "status": "ok", "msg": "restarted"}
+{"v": 1, "ev": "stats", "t": 1795432642.108, "hosts": {"web-1": {"ok": 10, "failures": 0, "unreachable": 0, "changed": 2, "skipped": 1, "rescued": 0, "ignored": 1}, "web-2": {"ok": 10, "failures": 0, "unreachable": 0, "changed": 2, "skipped": 1, "rescued": 0, "ignored": 1}}}

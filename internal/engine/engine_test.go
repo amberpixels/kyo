@@ -109,3 +109,66 @@ func write(t *testing.T, path, content string) {
 		t.Fatal(err)
 	}
 }
+
+func TestPlaybookFromArgs(t *testing.T) {
+	pb := playbookFromArgs(
+		[]string{"-i", "hosts.yml", "-e", "@vars.yml", "--check", "-D", "plays/site.yml", "other.yml"},
+	)
+	if pb.File != "site.yml" || !pb.Check || !pb.Diff {
+		t.Errorf("%+v", pb)
+	}
+}
+
+// TestRunNoPlugin is KYO_NO_PLUGIN=1: nothing installed or injected, and the
+// recap comes from the default callback's text.
+func TestRunNoPlugin(t *testing.T) {
+	if _, err := exec.LookPath("ansible-playbook"); err != nil {
+		t.Skip("ansible-playbook not on PATH")
+	}
+	project := t.TempDir()
+	write(t, filepath.Join(project, "site.yml"), `- hosts: all
+  gather_facts: false
+  tasks:
+    - ansible.builtin.command: "true"
+      changed_when: true
+    - ansible.builtin.debug:
+        msg: "fd=[{{ lookup('env', 'KYO_FD') }}] cb=[{{ lookup('env', 'ANSIBLE_CALLBACK_PLUGINS') }}]"
+`)
+	logPath := filepath.Join(project, "run.log")
+	cache := t.TempDir()
+
+	var stderr bytes.Buffer
+	code, err := Run(context.Background(), Options{
+		Args: []string{"-i", "localhost,", "-c", "local", "site.yml"},
+		Env: []string{
+			"PATH=" + os.Getenv("PATH"),
+			"HOME=" + os.Getenv("HOME"),
+			"KYO_LOG=" + logPath,
+			"KYO_NO_PLUGIN=1",
+			"ANSIBLE_LOCALHOST_WARNING=false",
+			"ANSIBLE_PYTHON_INTERPRETER=auto_silent",
+			"ANSIBLE_CALLBACK_RESULT_FORMAT=yaml",
+		},
+		Dir:       project,
+		Stderr:    &stderr,
+		CacheRoot: cache,
+		Lookup: func(context.Context, string, []string) ([]string, error) {
+			t.Error("callback_plugins looked up with KYO_NO_PLUGIN")
+			return nil, nil
+		},
+	})
+	if err != nil || code != 0 {
+		t.Fatalf("code %d, err %v, stderr:\n%s", code, err, stderr.String())
+	}
+	if !strings.Contains(stderr.String(), "apply: 1 changed on 1 host, nothing failed") ||
+		!strings.Contains(stderr.String(), "KYO_NO_PLUGIN is set") {
+		t.Errorf("summary:\n%s", stderr.String())
+	}
+	if entries, _ := os.ReadDir(cache); len(entries) != 0 {
+		t.Error("the plugin was installed")
+	}
+	log, _ := os.ReadFile(logPath)
+	if !strings.Contains(string(log), "fd=[] cb=[]") {
+		t.Errorf("kyo's variables reached ansible:\n%s", log)
+	}
+}

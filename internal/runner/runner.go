@@ -1,7 +1,7 @@
 // Package runner spawns ansible-playbook with kyo's event side channel: an
 // inherited pipe on fd 3 that the callback plugin writes JSON lines to. It tees
-// the child's stdout and stderr into the raw log, hands decoded events and
-// stderr lines to handlers, and forwards SIGINT/SIGTERM.
+// the child's stdout and stderr into the raw log, hands decoded events, stdout
+// and stderr lines to handlers, and forwards SIGINT/SIGTERM.
 package runner
 
 import (
@@ -41,8 +41,10 @@ type Options struct {
 	RawLog io.Writer // every stdout and stderr line, as printed
 
 	// Handlers are called from the runner's reader goroutines, one at a time
-	// (the runner serializes them), in arrival order per stream.
+	// (the runner serializes them), in arrival order per stream. A nil OnEvent
+	// means no side channel at all: no fd 3 and no KYO_FD for the child.
 	OnEvent  func(events.Event)
+	OnStdout func(line string)
 	OnStderr func(line string)
 }
 
@@ -67,24 +69,30 @@ func Run(ctx context.Context, opt Options) (*Result, error) {
 		env = os.Environ()
 	}
 
-	evR, evW, err := os.Pipe()
-	if err != nil {
-		return nil, fmt.Errorf("creating event pipe: %w", err)
-	}
-	defer evR.Close()
-	// The write end goes to the child; ours must be closed once it has started,
-	// or on any early return.
-	closeW := sync.OnceFunc(func() { _ = evW.Close() })
-	defer closeW()
-
 	cmd := exec.CommandContext(ctx, command, opt.Args...)
 	cmd.Dir = opt.Dir
-	cmd.Env = append(slices.Clone(env), fmt.Sprintf("KYO_FD=%d", eventFD))
+	cmd.Env = slices.Clone(env)
 	cmd.Stdin = opt.Stdin
 	if cmd.Stdin == nil {
 		cmd.Stdin = os.Stdin
 	}
-	cmd.ExtraFiles = []*os.File{evW}
+
+	var evR *os.File
+	closeW := func() {}
+	if opt.OnEvent != nil {
+		r, w, err := os.Pipe()
+		if err != nil {
+			return nil, fmt.Errorf("creating event pipe: %w", err)
+		}
+		defer r.Close()
+		// The write end goes to the child; ours must be closed once it has
+		// started, or on any early return.
+		closeW = sync.OnceFunc(func() { _ = w.Close() })
+		defer closeW()
+		evR = r
+		cmd.Env = append(cmd.Env, fmt.Sprintf("KYO_FD=%d", eventFD))
+		cmd.ExtraFiles = []*os.File{w}
+	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
@@ -120,6 +128,9 @@ func Run(ctx context.Context, opt Options) (*Result, error) {
 		scanLines(stdout, func(line string) {
 			mu.Lock()
 			logLine(line)
+			if opt.OnStdout != nil {
+				opt.OnStdout(line)
+			}
 			mu.Unlock()
 		})
 	}()
@@ -136,22 +147,24 @@ func Run(ctx context.Context, opt Options) (*Result, error) {
 	}()
 
 	evDone := make(chan struct{})
-	go func() {
-		defer close(evDone)
-		scanLines(evR, func(line string) {
-			ev, err := events.Decode([]byte(line))
-			mu.Lock()
-			defer mu.Unlock()
-			if err != nil {
-				res.BadEvents++
-				return
-			}
-			res.Events++
-			if opt.OnEvent != nil {
+	if evR == nil {
+		close(evDone)
+	} else {
+		go func() {
+			defer close(evDone)
+			scanLines(evR, func(line string) {
+				ev, err := events.Decode([]byte(line))
+				mu.Lock()
+				defer mu.Unlock()
+				if err != nil {
+					res.BadEvents++
+					return
+				}
+				res.Events++
 				opt.OnEvent(ev)
-			}
-		})
-	}()
+			})
+		}()
+	}
 
 	// stdout/stderr must be fully read before Wait, which closes them.
 	wg.Wait()

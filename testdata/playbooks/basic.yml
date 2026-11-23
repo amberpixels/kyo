@@ -1,12 +1,13 @@
-# Exercises every per-host status kyo reports. Runs against localhost with
-# -c local; the only thing it writes is a file under KYO_TEST_DIR.
+# Exercises every per-host status kyo reports, plus loops, includes, a role and
+# a handler. Runs with -i testdata/inventory.ini (local connection); the only
+# things it writes are files under KYO_TEST_DIR.
 - name: Basic
   hosts: all
   gather_facts: false
   tasks:
     - name: Write a file
       ansible.builtin.copy:
-        dest: "{{ lookup('env', 'KYO_TEST_DIR') }}/out.txt"
+        dest: "{{ lookup('env', 'KYO_TEST_DIR') }}/{{ inventory_hostname }}.txt"
         content: "hello\n"
 
     - name: Never runs
@@ -31,3 +32,7 @@
 
     - name: Include more
       ansible.builtin.include_tasks: included.yml
+
+    - name: Include the app role
+      ansible.builtin.include_role:
+        name: app

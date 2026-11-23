@@ -31,10 +31,10 @@ install:
 run *ARGS: build
     ./{{binary}} {{ARGS}}
 
-# Run the fixture playbook against localhost as a plan - no remote hosts
+# Run the fixture playbook on this machine as a plan - no remote hosts
 [group('dev')]
 demo: build
-    KYO_TEST_DIR="$(mktemp -d)" ANSIBLE_LOCALHOST_WARNING=false ./{{binary}} -i localhost, -c local --check --diff testdata/playbooks/basic.yml
+    KYO_TEST_DIR="$(mktemp -d)" ANSIBLE_LOCALHOST_WARNING=false ./{{binary}} -i testdata/inventory.ini --check --diff testdata/playbooks/basic.yml
 
 # Remove build artifacts
 [group('dev')]

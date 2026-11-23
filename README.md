@@ -5,8 +5,8 @@ banners into a live progress view and a summary of what changed (or, with
 `--check`, what would).
 
 > [!NOTE]
-> Pre-alpha. Open work is tracked in [issues/](issues/README.md) until it
-> moves to GitHub issues.
+> Pre-alpha. Open work is tracked in
+> [GitHub issues](https://github.com/amberpixels/kyo/issues).
 
 ```sh
 # before

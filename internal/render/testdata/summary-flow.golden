@@ -1,0 +1,37 @@
+  apply: 4 changed on 2 hosts, nothing failed
+
+  2 failures rescued
+
+  web-1
+    ~ Write the configs    (diff: +2)
+      --- before
+      +++ after: /tmp/kyo-record/web-1-one.conf
+      @@ -0,0 +1 @@
+      +name=one
+
+      --- before
+      +++ after: /tmp/kyo-record/web-1-two.conf
+      @@ -0,0 +1 @@
+      +name=two
+    ~ [app] Configure app  (diff: +1)
+      --- before
+      +++ after: /tmp/kyo-record/web-1-app.conf
+      @@ -0,0 +1 @@
+      +port: 8080
+
+  web-2
+    ~ Write the configs    (diff: +2)
+      --- before
+      +++ after: /tmp/kyo-record/web-2-one.conf
+      @@ -0,0 +1 @@
+      +name=one
+
+      --- before
+      +++ after: /tmp/kyo-record/web-2-two.conf
+      @@ -0,0 +1 @@
+      +name=two
+    ~ [app] Configure app  (diff: +1)
+      --- before
+      +++ after: /tmp/kyo-record/web-2-app.conf
+      @@ -0,0 +1 @@
+      +port: 8080

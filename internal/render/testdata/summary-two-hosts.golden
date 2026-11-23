@@ -1,0 +1,20 @@
+  plan: 3 changes on 1 host, 1 failed, 1 unreachable                  2:05
+
+  failed
+    web-1  [nginx] Write the site config: Destination directory does not exist
+
+  unreachable
+    web-1  Drain: ssh: connect to host web-1 port 22: Connection refused
+
+  1 failure ignored
+
+  web-2
+    ~ Install packages               (diff: +3 -1)
+    ~ [nginx] Write the site config  (diff: +4)
+    ~ Restart nginx (handler)
+
+  warnings
+    1× Host 'web-2' is using the discovered Python interpreter at '/usr/bin/python3.12'  (web-2)
+    1× deprecation: The 'warn' parameter is deprecated.  (web-2)
+
+  raw log: kyo-20261123-120000.log

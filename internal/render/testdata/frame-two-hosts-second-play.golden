@@ -1,0 +1,8 @@
+  site.yml · plan (--check) · 2 hosts                                 0:06
+
+  ✓ Base        6/6  0:04
+  ⠼ Rolling     2/4  Drain
+                     web-2 …
+
+  ok 2   changed 3   skipped 1   failed 1   unreachable 1   ignored 1
+  warnings 1

@@ -1,0 +1,12 @@
+  site.yml · apply · 20 hosts                                         3:00
+
+  ✓ Stage 1         5/5  0:10
+  ✓ Stage 2         5/5  0:20
+  ✓ Stage 3         5/5  0:30
+  ✓ Stage 4         5/5  0:40
+  ✓ Stage 5         5/5  0:50
+  ✓ Stage 6         5/5  1:00
+  ▸ Deploy apps     3/9  [app_env] Read the current env files  0:14
+                         app-01 ✓  app-02 ~  app-03 ✗  app-04 …  app-05 …  +15
+
+  ok 410   changed 12   skipped 80   failed 0   unreachable 0

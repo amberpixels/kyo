@@ -225,7 +225,10 @@ func TestRunRecordsAndReplays(t *testing.T) {
 }
 
 // assertReplays replays the recording at path instantly and requires the
-// run's exit code and output.
+// run's exit code and summary. Plain progress lines are left out of the
+// comparison: each shows whatever state the once-a-second tick caught, which
+// depends on how long the run took, while an instant replay ticks only at its
+// end.
 func assertReplays(t *testing.T, path string, code int, output string) {
 	t.Helper()
 	var replayed bytes.Buffer
@@ -235,7 +238,18 @@ func assertReplays(t *testing.T, path string, code int, output string) {
 	if err != nil || rcode != code {
 		t.Fatalf("replay code %d (run %d), err %v, stderr:\n%s", rcode, code, err, replayed.String())
 	}
-	if replayed.String() != output {
+	if summaryOnly(replayed.String()) != summaryOnly(output) {
 		t.Errorf("replay differs from the run\nrun:\n%s\nreplay:\n%s", output, replayed.String())
 	}
+}
+
+// summaryOnly drops plain mode's progress lines, which all start "kyo · ".
+func summaryOnly(out string) string {
+	var keep []string
+	for line := range strings.Lines(out) {
+		if !strings.HasPrefix(line, "kyo · ") {
+			keep = append(keep, line)
+		}
+	}
+	return strings.Join(keep, "")
 }

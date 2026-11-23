@@ -29,6 +29,25 @@ func TestWantPassthrough(t *testing.T) {
 	}
 }
 
+func TestArgsCheck(t *testing.T) {
+	cases := map[string]bool{
+		"site.yml --check":       true,
+		"-C site.yml":            true,
+		"-vvC site.yml":          true,
+		"-CD site.yml":           true,
+		"site.yml":               false,
+		"-e C=1 site.yml":        false,
+		"-eC=1 site.yml":         false,
+		"-i hosts -l C site.yml": false,
+		"site.yml -- --check":    false,
+	}
+	for args, want := range cases {
+		if got := argsCheck(strings.Fields(args)); got != want {
+			t.Errorf("argsCheck(%q) = %v, want %v", args, got, want)
+		}
+	}
+}
+
 // TestRunKeepsUsersCallbackPlugins is the acceptance test for issue 004: a
 // callback_plugins dir from the project's ansible.cfg still loads next to kyo's.
 func TestRunKeepsUsersCallbackPlugins(t *testing.T) {
@@ -74,7 +93,9 @@ class CallbackModule(CallbackBase):
 	if !strings.Contains(string(log), "USER PLUGIN LOADED") {
 		t.Errorf("user's callback plugin did not load; log:\n%s", log)
 	}
-	if !strings.Contains(stderr.String(), "plan site.yml: 0 would change on 0 of 1 hosts") {
+	if !strings.HasPrefix(stderr.String(), "kyo · site.yml · plan (--check) · 1 host\n") ||
+		!strings.Contains(stderr.String(), "  plan: no changes, nothing failed") ||
+		!strings.Contains(stderr.String(), "raw log: "+logPath) {
 		t.Errorf("summary:\n%s", stderr.String())
 	}
 }

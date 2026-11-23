@@ -27,8 +27,8 @@ companion in Ursula K. Le Guin's *Rocannon's World*, the novel that coined the
 word "ansible".
 
 > [!NOTE]
-> Pre-alpha. Today kyo prints a per-host recap from structured events; the
-> live progress view and the per-task plan summary are in progress, tracked in
+> Pre-alpha. The live view and the plan/apply summary work; exit-code policy,
+> prompts under the live view and replay are tracked in
 > [issues](https://github.com/amberpixels/kyo/issues).
 
 ## Install
@@ -48,14 +48,43 @@ ansible-playbook site.yml --check
 kyo site.yml --check
 ```
 
+While it runs, a block on stderr repaints in place: one row per play (finished
+ones collapse to a check mark and their duration), the task running now with
+each host's outcome as it reports, and the run's counters:
+
 ```
-plan site.yml: 3 would change on 2 of 2 hosts  (2m5s)
-  web-1                    ok 61   changed 2    skipped 22   failed 0    unreachable 0    ignored 0
-  web-2                    ok 58   changed 1    skipped 22   failed 0    unreachable 0    ignored 0
-raw log: kyo-20261123-120000.log
+  site.yml · plan (--check) · 2 hosts                         1:42
+
+  ✓ Base             6/6  0:21
+  ⠼ Deploy apps     9/31  [app] Write the app config
+                          web-1 ~  web-2 …
+
+  ok 61   changed 3   skipped 22   failed 0   unreachable 0
+  warnings 4 (3 deprecation)
 ```
 
-Without `--check` the same line reads `apply site.yml: ... changed`. The exit
+When it ends, the block gives way to the summary:
+
+```
+  plan: 3 changes on 2 hosts, nothing failed                  2:05
+
+  web-1
+    ~ [app] Write the app config     (diff: +4 -1)
+    ~ [nginx] Write the site config  (diff: +4)
+
+  web-2
+    ~ [nginx] Write the site config  (diff: +4)
+
+  warnings
+    3× deprecation: a module option is deprecated  (web-1, web-2)
+    1× Failed to look up user with uid 1001
+
+  raw log: kyo-20261123-120000.log
+```
+
+With `--diff`, each change carries its diff beneath it (an identical diff on a
+later host points at the first). Without `--check` the summary reads
+`apply: 3 changed on 2 hosts`, with failed and unreachable hosts listed first. The exit
 code is ansible-playbook's own. Commands that only print and exit
 (`--list-tasks`, `--list-hosts`, `--list-tags`, `--syntax-check`) run unwrapped.
 
@@ -75,6 +104,8 @@ Environment variables only, so nothing collides with ansible-playbook's flags.
 | Variable | Effect |
 |---|---|
 | `KYO_LOG=path` | Write the raw log here instead of `./kyo-<timestamp>.log`. `/dev/null` discards it. |
+| `KYO_PLAIN=1` | No repainted block: a line per finished play, per failure, and every 15s of quiet. Also on when `CI` or `CLAUDECODE` is set, or stderr is not a terminal. |
+| `NO_COLOR=1` | No color. The block still repaints. |
 | `KYO_PASSTHROUGH=1` | Don't wrap at all: ansible-playbook's own output and exit code. |
 | `KYO_ANSIBLE_PLAYBOOK=path` | The ansible-playbook to run (default: the one on `PATH`). |
 | `KYO_ANSIBLE_CONFIG=path` | The ansible-config used to read your `callback_plugins` (default: the one on `PATH`). |

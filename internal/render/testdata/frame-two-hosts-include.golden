@@ -1,7 +1,7 @@
   site.yml · plan (--check) · 2 hosts                                 2:00
 
-  ▸ Base    3/4+  [extras] One
-                  web-2 …
-
+  ▸ Base ███████░░░ 3/4+  [extras] One
+                          web-2 …
+  ────────────────────────────────────────────────────────────────────────
   ok 2   changed 2   skipped 0   failed 1   unreachable 0
   warnings 1

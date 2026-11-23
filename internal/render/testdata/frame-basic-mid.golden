@@ -1,6 +1,6 @@
   basic.yml · apply · 2 hosts                                         0:01
 
-  ▸ Basic     3/7  Fail but carry on
-                   web-1 …  web-2 …
-
+  ▸ Basic ████░░░░░░ 3/7  42%  Fail but carry on
+                               web-1 …  web-2 …
+  ────────────────────────────────────────────────────────────────────────
   ok 2   changed 2   skipped 2   failed 0   unreachable 0

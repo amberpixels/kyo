@@ -17,6 +17,11 @@ type Styles struct {
 	changed lipgloss.Style
 	failed  lipgloss.Style
 	skipped lipgloss.Style
+	muted   lipgloss.Style // nonzero skipped, ignored and rescued counters
+	spin    lipgloss.Style // the running play's glyph
+	bar     lipgloss.Style // a progress bar's filled cells
+	track   lipgloss.Style // a progress bar's empty cells
+	pct     lipgloss.Style // a progress bar's percentage
 	done    lipgloss.Style // a finished play's check mark
 	took    lipgloss.Style // a finished play's duration
 	dim     lipgloss.Style // secondary text: pending hosts, log path, notes
@@ -35,6 +40,7 @@ var (
 	colRed   = lipgloss.Color("#EF4444")
 	colAmber = lipgloss.Color("#F59E0B")
 	colPink  = lipgloss.Color("#F472B6")
+	colGray  = lipgloss.Color("#6B7280")
 )
 
 // NewStyles builds styles for w, detecting its color profile. A NO_COLOR in
@@ -43,13 +49,24 @@ func NewStyles(w io.Writer, env []string) *Styles {
 	if Getenv(env, "NO_COLOR") != "" {
 		return plainStyles()
 	}
-	s := lipgloss.NewRenderer(w).NewStyle
+	return newStyles(lipgloss.NewRenderer(w))
+}
+
+// newStyles builds the colored styles over r, whose profile decides how much
+// of the color survives.
+func newStyles(r *lipgloss.Renderer) *Styles {
+	s := r.NewStyle
 	return &Styles{
 		title:   s().Bold(true),
 		ok:      s().Foreground(colGreen),
 		changed: s().Foreground(colAmber),
 		failed:  s().Foreground(colRed).Bold(true),
-		skipped: s().Faint(true),
+		skipped: s().Foreground(colGray),
+		muted:   s().Foreground(colGray),
+		spin:    s().Foreground(colTeal),
+		bar:     s().Foreground(colTeal),
+		track:   s().Foreground(colGray).Faint(true),
+		pct:     s().Foreground(colTeal),
 		done:    s().Foreground(colGreen).Bold(true),
 		took:    s().Foreground(colGreen).Faint(true),
 		dim:     s().Faint(true),

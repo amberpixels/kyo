@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/amberpixels/kyo/internal/aggregator"
@@ -23,6 +24,19 @@ const playNameMax = 28
 // taskTimerMin is how old the current task must be before it shows a timer,
 // because quick tasks would only flicker 0:00.
 const taskTimerMin = 10 * time.Second
+
+// playBarWidth is the cell width of the running play's progress bar.
+const playBarWidth = 10
+
+// barMinWidth is the narrowest terminal that still draws the progress bar;
+// below it the bar would push the task label out of view.
+const barMinWidth = 60
+
+// The progress bar's glyphs, ele's: they differ without color too.
+const (
+	barFill  = "█"
+	barTrack = "░"
+)
 
 // Opts controls a rendered frame.
 type Opts struct {
@@ -47,7 +61,8 @@ func Frame(s aggregator.Snapshot, opt Opts) []string {
 
 	head := []string{headerLine(st, s, opt), ""}
 	plays := playRows(st, s, opt)
-	tail := []string{"", "  " + countersLine(st, s.Totals)}
+	// The rule takes the blank line's place, so the block keeps its height.
+	tail := []string{ruleLine(st, opt.Width), "  " + countersLine(st, s.Totals)}
 	if s.WarnTotal > 0 {
 		tail = append(tail, "  "+warningsLine(st, s))
 	}
@@ -119,22 +134,40 @@ func playRows(st *Styles, s aggregator.Snapshot, opt Opts) []string {
 	for _, p := range s.Plays {
 		nameW = max(nameW, min(ansi.StringWidth(playName(p)), playNameMax))
 	}
+	// With a bar, counts sit left-aligned after it, and finished rows leave the
+	// bar's column blank so every count starts in the same column.
+	withBar := (opt.Width <= 0 || opt.Width >= barMinWidth) &&
+		slices.ContainsFunc(s.Plays, func(p aggregator.PlayProgress) bool { return !p.Ended })
 	var rows []string
 	for _, p := range s.Plays {
 		name := padRight(ansi.Truncate(playName(p), playNameMax, "…"), nameW)
 		count := fmt.Sprintf("%7s", progress(p))
+		if withBar {
+			count = progress(p)
+		}
 		if p.Ended {
+			if withBar {
+				name += strings.Repeat(" ", playBarWidth+1)
+			}
 			rows = append(rows, fmt.Sprintf("  %s %s %s  %s",
 				st.done.Render("✓"), name, count, st.took.Render(clockText(p.Took))))
 			continue
 		}
-		row := fmt.Sprintf("  %s %s %s", spin(opt.Spinner), name, count)
+		row := fmt.Sprintf("  %s %s", st.spin.Render(spin(opt.Spinner)), name)
+		if withBar {
+			row += " " + playBar(st, p) + " " + count
+			if pc := percent(p); pc != "" {
+				row += "  " + st.pct.Render(pc)
+			}
+		} else {
+			row += " " + count
+		}
 		if s.Current == nil {
 			rows = append(rows, row)
 			continue
 		}
 		indent := ansi.StringWidth(row) + 2
-		row += "  " + taskLabel(s.Current.Role, s.Current.Name, s.Current.Handler)
+		row += "  " + currentLabel(st, s.Current)
 		if s.Current.Elapsed >= taskTimerMin {
 			row += "  " + clock(st, s.Current.Elapsed)
 		}
@@ -190,6 +223,29 @@ func progress(p aggregator.PlayProgress) string {
 	return strconv.Itoa(p.Done) + "/" + t
 }
 
+// playBar is the running play's progress as filled cells over a track. An
+// inexact total can still grow, so its bar never reads full.
+func playBar(st *Styles, p aggregator.PlayProgress) string {
+	filled := 0
+	if p.Total > 0 {
+		filled = min(p.Done*playBarWidth/p.Total, playBarWidth)
+		if !p.Exact && filled == playBarWidth {
+			filled--
+		}
+	}
+	return st.bar.Render(strings.Repeat(barFill, filled)) +
+		st.track.Render(strings.Repeat(barTrack, playBarWidth-filled))
+}
+
+// percent is the running play's "NN%", empty while the total is unknown or
+// can still grow, because a share of a moving total would mislead.
+func percent(p aggregator.PlayProgress) string {
+	if p.Total <= 0 || !p.Exact {
+		return ""
+	}
+	return strconv.Itoa(min(p.Done*100/p.Total, 100)) + "%"
+}
+
 func spin(r rune) string {
 	if r == 0 {
 		return "▸"
@@ -206,6 +262,16 @@ func taskLabel(role, name string, handler bool) string {
 		name += " (handler)"
 	}
 	return name
+}
+
+// currentLabel is the running task's label with its role dimmed, so the
+// task's name reads first.
+func currentLabel(st *Styles, cur *aggregator.CurrentTask) string {
+	label := taskLabel("", cur.Name, cur.Handler)
+	if cur.Role != "" {
+		label = st.dim.Render("["+cur.Role+"]") + " " + label
+	}
+	return label
 }
 
 // hostsLine lists the current task's hosts on one line: those that reported,
@@ -243,22 +309,37 @@ func hostsLine(st *Styles, cur *aggregator.CurrentTask, width int) string {
 	return line
 }
 
+// ruleLine sets the counters apart from the plays: a faint rule from the
+// indent to the meta column, or the terminal's edge when that is nearer.
+func ruleLine(st *Styles, width int) string {
+	edge := metaWidth
+	if width > 0 && width < metaWidth {
+		edge = width
+	}
+	return "  " + st.dim.Render(strings.Repeat("─", max(edge-2, 0)))
+}
+
 // countersLine is the run's totals; ignored and rescued show only when set.
 func countersLine(st *Styles, c aggregator.Counters) string {
 	parts := []string{
-		"ok " + strconv.Itoa(c.OK),
-		pick(c.Changed > 0, st.changed, st.dim).Render("changed " + strconv.Itoa(c.Changed)),
-		"skipped " + strconv.Itoa(c.Skipped),
-		pick(c.Failed > 0, st.failed, st.dim).Render("failed " + strconv.Itoa(c.Failed)),
-		pick(c.Unreachable > 0, st.failed, st.dim).Render("unreachable " + strconv.Itoa(c.Unreachable)),
+		counter(st, st.ok, "ok", c.OK),
+		counter(st, st.changed, "changed", c.Changed),
+		counter(st, st.skipped, "skipped", c.Skipped),
+		counter(st, st.failed, "failed", c.Failed),
+		counter(st, st.failed, "unreachable", c.Unreachable),
 	}
 	if c.Ignored > 0 {
-		parts = append(parts, st.dim.Render("ignored "+strconv.Itoa(c.Ignored)))
+		parts = append(parts, counter(st, st.muted, "ignored", c.Ignored))
 	}
 	if c.Rescued > 0 {
-		parts = append(parts, st.dim.Render("rescued "+strconv.Itoa(c.Rescued)))
+		parts = append(parts, counter(st, st.muted, "rescued", c.Rescued))
 	}
 	return strings.Join(parts, "   ")
+}
+
+// counter is "label n" in its color when n is nonzero, dim when it is zero.
+func counter(st *Styles, style lipgloss.Style, label string, n int) string {
+	return pick(n > 0, style, st.dim).Render(label + " " + strconv.Itoa(n))
 }
 
 func warningsLine(st *Styles, s aggregator.Snapshot) string {

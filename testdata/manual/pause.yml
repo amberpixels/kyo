@@ -1,0 +1,22 @@
+- name: Pauses
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Warm up
+      ansible.builtin.command: "true"
+      changed_when: false
+
+    - name: Bare pause
+      ansible.builtin.pause:
+
+    - name: Pause with a prompt
+      ansible.builtin.pause:
+        prompt: Type anything, then Enter
+
+    - name: Timed pause
+      ansible.builtin.pause:
+        seconds: 3
+
+    - name: After the pauses
+      ansible.builtin.debug:
+        msg: done

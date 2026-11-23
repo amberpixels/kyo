@@ -40,6 +40,11 @@ const (
 
 var spinner = []rune("⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏")
 
+// ExitChangesPending is kyo's exit code for a plan whose run succeeded with
+// changes pending, under KYO_DETAILED_EXIT=1. ansible-playbook owns 0-5, 99
+// and 250.
+const ExitChangesPending = 10
+
 // passthroughFlags make ansible-playbook print something and exit without
 // running a play, so kyo has nothing to add.
 var passthroughFlags = []string{
@@ -98,8 +103,12 @@ func Run(ctx context.Context, opt Options) (int, error) {
 	agg := aggregator.New(opt.Now)
 	rec := startRecording(logPath, logf)
 	in := &inputs{agg: agg, rec: rec, now: opt.Now}
+	gate := newPromptGate(opt.Stderr)
 	sw := source.New(source.Options{
-		Sink:      in.Event,
+		Sink: func(ev events.Event) {
+			in.Event(ev)
+			gate.observe(ev)
+		},
 		Playbook:  playbookFromArgs(opt.Args),
 		Now:       opt.Now,
 		ForceText: noPlugin,
@@ -117,19 +126,24 @@ func Run(ctx context.Context, opt Options) (int, error) {
 			fmt.Fprintf(logf, "kyo: recording events failed: %v\n", err)
 		}
 	}()
-	view := startView(opt, agg, start, check)
+	view := startView(opt, agg, gate, start, check)
 	defer view.close() // restore the cursor even on a panic; idempotent
 
 	res, err := runner.Run(ctx, runner.Options{
-		Command:  getenv(opt.Env, "KYO_ANSIBLE_PLAYBOOK"),
-		Args:     opt.Args,
-		Dir:      opt.Dir,
-		Env:      env,
-		RawLog:   logf,
-		OnEvent:  onEvent,
-		OnStdout: sw.Stdout,
-		OnStderr: in.Stderr,
+		Command: getenv(opt.Env, "KYO_ANSIBLE_PLAYBOOK"),
+		Args:    opt.Args,
+		Dir:     opt.Dir,
+		Env:     env,
+		RawLog:  logf,
+		OnEvent: onEvent,
+		OnStdout: func(line string) {
+			sw.Stdout(line)
+			gate.line(line)
+		},
+		OnStdoutPartial: gate.partial,
+		OnStderr:        in.Stderr,
 	})
+	gate.stop()
 	view.stop()
 	if err != nil {
 		view.clear()
@@ -148,26 +162,29 @@ func Run(ctx context.Context, opt Options) (int, error) {
 	}
 	snap, elapsed := agg.Snapshot(), end.Sub(start)
 	view.end(snap, elapsed)
-	report(opt, ending{
+	return report(opt, ending{
 		snap: snap, elapsed: elapsed, logPath: logPath, check: check,
 		src: src, noPlugin: noPlugin, late: late,
-	})
-	return res.ExitCode, nil
+		exitCode: res.ExitCode, exitKnown: true,
+	}), nil
 }
 
 // ending is what the summary needs from a finished run, live or replayed.
 type ending struct {
-	snap     aggregator.Snapshot
-	elapsed  time.Duration
-	logPath  string
-	check    bool
-	src      source.Source
-	noPlugin bool
-	late     int
+	snap      aggregator.Snapshot
+	elapsed   time.Duration
+	logPath   string
+	check     bool
+	src       source.Source
+	noPlugin  bool
+	late      int
+	exitCode  int  // the child's, as the runner reported it
+	exitKnown bool // false for a recording that stops before the run ended
 }
 
-// report prints the summary, or why there is none, after the view has ended.
-func report(opt Options, e ending) {
+// report prints the summary, or why there is none, after the view has ended,
+// and returns kyo's exit code for the run.
+func report(opt Options, e ending) int {
 	if e.src == source.None {
 		why := "no events from the callback plugin"
 		if e.noPlugin {
@@ -175,11 +192,19 @@ func report(opt Options, e ending) {
 		}
 		fmt.Fprintf(opt.Stderr, "kyo: %s, and the output is not the default callback's; the run's output is in %s\n",
 			why, e.logPath)
-		return
+		return e.exitCode // nothing is known about changes, so no detailed code
 	}
 	width, height := render.Size(opt.Stderr)
 	if height == 0 {
 		width = 0 // not a terminal: lines stay whole
+	}
+	code := e.exitCode
+	var note string
+	if e.exitKnown {
+		code = exitCode(e.exitCode, e.snap, getenv(opt.Env, "KYO_DETAILED_EXIT") == "1", e.check)
+	}
+	if code != e.exitCode {
+		note = fmt.Sprintf("exit %d: changes pending (KYO_DETAILED_EXIT)", code)
 	}
 	render.Summary(opt.Stderr, e.snap, render.SummaryOpts{
 		LogPath:   e.logPath,
@@ -187,6 +212,7 @@ func report(opt Options, e ending) {
 		Width:     width,
 		ArgsCheck: e.check,
 		Styles:    render.NewStyles(opt.Stderr, opt.Env),
+		Note:      note,
 	})
 	switch e.src {
 	case source.Text:
@@ -202,6 +228,19 @@ func report(opt Options, e ending) {
 		)
 	case source.None, source.Plugin:
 	}
+	return code
+}
+
+// exitCode is kyo's exit code for a run some source fed: the child's own,
+// which includes 128+signal for a signal death, except that with detailed set
+// a plan that succeeded with changes pending exits ExitChangesPending. A
+// failed plan keeps its code, because a failure is not drift. An apply
+// ignores detailed.
+func exitCode(child int, snap aggregator.Snapshot, detailed, argsCheck bool) int {
+	if detailed && child == 0 && render.IsPlan(snap, argsCheck) && len(snap.Changes) > 0 {
+		return ExitChangesPending
+	}
+	return child
 }
 
 // inputs is the aggregator's front door: each event and stderr line is
@@ -273,7 +312,7 @@ type view struct {
 	once  sync.Once
 }
 
-func startView(opt Options, agg *aggregator.Aggregator, start time.Time, check bool) *view {
+func startView(opt Options, agg *aggregator.Aggregator, gate *promptGate, start time.Time, check bool) *view {
 	v := &view{w: opt.Stderr, done: make(chan struct{})}
 	styles := render.NewStyles(opt.Stderr, opt.Env)
 
@@ -287,7 +326,8 @@ func startView(opt Options, agg *aggregator.Aggregator, start time.Time, check b
 				case <-v.done:
 					return
 				case <-t.C:
-					v.plain.Update(agg.Snapshot(), opt.Now().Sub(start))
+					snap := agg.Snapshot()
+					gate.paint(func() { v.plain.Update(snap, opt.Now().Sub(start)) })
 				}
 			}
 		})
@@ -295,6 +335,10 @@ func startView(opt Options, agg *aggregator.Aggregator, start time.Time, check b
 	}
 
 	v.live = render.NewLive(opt.Stderr)
+	gate.onOpen = func() {
+		v.live.Clear()
+		v.live.Close() // the cursor shows for typing; the next paint hides it
+	}
 	fo := render.Opts{ArgsCheck: check, Styles: styles}
 	v.wg.Go(func() {
 		t := time.NewTicker(tickInterval)
@@ -317,7 +361,8 @@ func startView(opt Options, agg *aggregator.Aggregator, start time.Time, check b
 				// screen and strands a copy of the block's top line.
 				w, h := render.Size(opt.Stderr)
 				fo.Width, fo.MaxLines = w, max(h-1, 0)
-				v.live.Render(render.Frame(snap, fo))
+				frame := render.Frame(snap, fo)
+				gate.paint(func() { v.live.Render(frame) })
 			}
 		}
 	})

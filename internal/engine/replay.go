@@ -49,7 +49,7 @@ func Replay(ctx context.Context, path string, opt Options) (int, error) {
 	opt.Now = func() time.Time { return pace.clock(wall()) }
 
 	agg := aggregator.New(opt.Now)
-	view := startView(opt, agg, rec.Start.Time, rec.Start.Check)
+	view := startView(opt, agg, newPromptGate(opt.Stderr), rec.Start.Time, rec.Start.Check) // a replay never prompts
 	defer view.close()
 
 	for _, it := range rec.Items {
@@ -71,15 +71,16 @@ func Replay(ctx context.Context, path string, opt Options) (int, error) {
 	agg.Finish(rec.End.Time)
 	snap, elapsed := agg.Snapshot(), rec.End.Time.Sub(rec.Start.Time)
 	view.end(snap, elapsed)
-	report(opt, ending{
+	code := report(opt, ending{
 		snap: snap, elapsed: elapsed, logPath: rec.Start.LogPath, check: rec.Start.Check,
 		src: sourceFromName(rec.End.Source), noPlugin: rec.End.NoPlugin, late: rec.End.Late,
+		exitCode: rec.End.ExitCode, exitKnown: rec.Ended,
 	})
 	if !rec.Ended {
 		fmt.Fprintln(opt.Stderr, "kyo: the recording stops before the run ended; its exit code is unknown")
 		return 1, nil
 	}
-	return rec.End.ExitCode, nil
+	return code, nil
 }
 
 // replayDuration reads KYO_REPLAY_SECONDS: a non-negative number of seconds.

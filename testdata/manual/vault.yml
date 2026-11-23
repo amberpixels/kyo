@@ -1,0 +1,10 @@
+# Run with --ask-vault-pass; the password is "kyo-manual".
+- name: Vault
+  hosts: all
+  gather_facts: false
+  vars_files:
+    - vault-vars.yml
+  tasks:
+    - name: Show the vaulted value's length
+      ansible.builtin.debug:
+        msg: "length={{ vaulted | length }}"

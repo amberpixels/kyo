@@ -1,7 +1,8 @@
 // Package runner spawns ansible-playbook with kyo's event side channel: an
 // inherited pipe on fd 3 that the callback plugin writes JSON lines to. It tees
 // the child's stdout and stderr into the raw log, hands decoded events, stdout
-// and stderr lines to handlers, and forwards SIGINT/SIGTERM.
+// and stderr lines to handlers, and forwards SIGTERM, and SIGINT when the
+// terminal did not already deliver it.
 package runner
 
 import (
@@ -14,9 +15,12 @@ import (
 	"os/exec"
 	"os/signal"
 	"slices"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/amberpixels/kyo/internal/events"
 )
@@ -46,6 +50,11 @@ type Options struct {
 	OnEvent  func(events.Event)
 	OnStdout func(line string)
 	OnStderr func(line string)
+
+	// OnStdoutPartial gets stdout's unterminated tail after every read that
+	// changes it, and "" once a newline completes it. A tail that stands is
+	// usually a prompt: input() writes its text without a newline.
+	OnStdoutPartial func(tail string)
 }
 
 // Result reports how the child exited and what the side channel delivered.
@@ -69,6 +78,8 @@ func Run(ctx context.Context, opt Options) (*Result, error) {
 		env = os.Environ()
 	}
 
+	// The child stays in kyo's process group, the terminal's foreground one:
+	// getpass and ansible's prompt_until refuse to prompt from any other.
 	cmd := exec.CommandContext(ctx, command, opt.Args...)
 	cmd.Dir = opt.Dir
 	cmd.Env = slices.Clone(env)
@@ -108,7 +119,7 @@ func Run(ctx context.Context, opt Options) (*Result, error) {
 	}
 	closeW() // the child holds its own copy; ours would keep the pipe open
 
-	stop := forwardSignals(cmd)
+	stop := forwardSignals(cmd, ttyForeground)
 	defer stop()
 
 	var (
@@ -125,12 +136,19 @@ func Run(ctx context.Context, opt Options) (*Result, error) {
 	wg.Add(2)
 	go func() {
 		defer wg.Done()
-		scanLines(stdout, func(line string) {
+		readLines(stdout, func(line string) {
 			mu.Lock()
 			logLine(line)
 			if opt.OnStdout != nil {
 				opt.OnStdout(line)
 			}
+			mu.Unlock()
+		}, func(tail string) {
+			if opt.OnStdoutPartial == nil {
+				return
+			}
+			mu.Lock()
+			opt.OnStdoutPartial(tail)
 			mu.Unlock()
 		})
 	}()
@@ -189,18 +207,72 @@ func Run(ctx context.Context, opt Options) (*Result, error) {
 	return &out, nil
 }
 
-// scanLines feeds each line of r to fn. Lines up to 4 MB are kept whole (debug
-// dumps and big diffs get long).
+// maxLine is the longest line kept whole (debug dumps and big diffs get long).
+const maxLine = 4 * 1024 * 1024
+
+// scanLines feeds each line of r to fn.
 func scanLines(r io.Reader, fn func(string)) {
 	sc := bufio.NewScanner(r)
-	sc.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	sc.Buffer(make([]byte, 0, 64*1024), maxLine)
 	for sc.Scan() {
 		fn(sc.Text())
 	}
 }
 
+// readLines feeds each complete line of r to fn, like scanLines, and reports
+// the unterminated tail to partial whenever it changes: a non-empty tail after
+// a read that left one, "" when a newline completes it. A line past maxLine is
+// handed over in pieces rather than stopping the read, so the pipe keeps
+// draining and the child never blocks on it.
+func readLines(r io.Reader, fn, partial func(string)) {
+	buf := make([]byte, 64*1024)
+	var line []byte
+	reported := false
+	for {
+		n, err := r.Read(buf)
+		chunk := buf[:n]
+		for len(chunk) > 0 {
+			i := slices.Index(chunk, '\n')
+			if i < 0 {
+				line = append(line, chunk...)
+				break
+			}
+			line = append(line, chunk[:i]...)
+			chunk = chunk[i+1:]
+			fn(strings.TrimSuffix(string(line), "\r"))
+			line = line[:0]
+			if reported {
+				partial("")
+				reported = false
+			}
+		}
+		if len(line) > maxLine {
+			fn(string(line))
+			line = line[:0]
+		}
+		if len(line) > 0 && n > 0 {
+			partial(string(line))
+			reported = true
+		}
+		if err != nil {
+			if len(line) > 0 {
+				fn(string(line))
+			}
+			if reported {
+				partial("")
+			}
+			return
+		}
+	}
+}
+
 // forwardSignals relays SIGINT/SIGTERM to the child and returns a stop func.
-func forwardSignals(cmd *exec.Cmd) func() {
+// A SIGINT is skipped while kyo owns the terminal (foreground reports true):
+// the terminal sent it to the whole process group, the child included, and a
+// second one makes ansible-playbook die of the signal (exit 130) instead of
+// stopping cleanly with 99. Checked on ansible-core 2.22. A kill -INT aimed at
+// kyo alone while it is in the foreground is therefore not forwarded.
+func forwardSignals(cmd *exec.Cmd, foreground func() bool) func() {
 	ch := make(chan os.Signal, 1)
 	signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
 	done := make(chan struct{})
@@ -208,7 +280,7 @@ func forwardSignals(cmd *exec.Cmd) func() {
 		for {
 			select {
 			case s := <-ch:
-				if cmd.Process != nil {
+				if cmd.Process != nil && shouldForward(s, foreground) {
 					_ = cmd.Process.Signal(s)
 				}
 			case <-done:
@@ -220,6 +292,25 @@ func forwardSignals(cmd *exec.Cmd) func() {
 		signal.Stop(ch)
 		close(done)
 	}
+}
+
+// shouldForward reports whether s must be relayed to the child.
+func shouldForward(s os.Signal, foreground func() bool) bool {
+	return s != syscall.SIGINT || !foreground()
+}
+
+// ttyForeground reports whether kyo's process group is the foreground group of
+// its controlling terminal, read from the first standard stream that is one.
+// Without a terminal it is false: any SIGINT then came from kill.
+func ttyForeground() bool {
+	for _, f := range []*os.File{os.Stdin, os.Stderr, os.Stdout} {
+		pgrp, err := unix.IoctlGetInt(int(f.Fd()), unix.TIOCGPGRP)
+		if err != nil {
+			continue // not a terminal
+		}
+		return pgrp == unix.Getpgrp()
+	}
+	return false
 }
 
 // exitStatus maps cmd.Wait's error to an exit code (128+signal for a signal

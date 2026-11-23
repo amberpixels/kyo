@@ -1,0 +1,26 @@
+# Two plays, so the second play's prompts open while the live block is up.
+- name: First play
+  hosts: all
+  gather_facts: false
+  vars_prompt:
+    - name: color
+      prompt: Favorite color
+      private: false
+    - name: secret
+      prompt: A secret
+  tasks:
+    - name: Show the answers
+      ansible.builtin.debug:
+        msg: "color={{ color }} secret_length={{ secret | length }}"
+
+- name: Second play
+  hosts: all
+  gather_facts: false
+  vars_prompt:
+    - name: token
+      prompt: A token, twice
+      confirm: true
+  tasks:
+    - name: Show the token length
+      ansible.builtin.debug:
+        msg: "token_length={{ token | length }}"

@@ -1,0 +1,9 @@
+# Run with -K (--ask-become-pass); needs a sudo password on the target.
+- name: Become
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Who am I as root
+      ansible.builtin.command: whoami
+      become: true
+      changed_when: false

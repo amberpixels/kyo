@@ -33,6 +33,14 @@ word "ansible".
 
 ## Install
 
+### Homebrew (macOS)
+
+```sh
+brew install amberpixels/tap/kyo
+```
+
+### go install
+
 ```sh
 go install github.com/amberpixels/kyo/cmd/kyo@latest
 ```
@@ -63,24 +71,11 @@ each host's outcome as it reports, and the run's counters:
   warnings 4 (3 deprecation)
 ```
 
-When it ends, the block gives way to the summary:
+When it ends, the block gives way to the summary. A plan run with `--diff`:
 
-```
-  plan: 3 changes on 2 hosts, nothing failed                  2:05
-
-  web-1
-    ~ [app] Write the app config     (diff: +4 -1)
-    ~ [nginx] Write the site config  (diff: +4)
-
-  web-2
-    ~ [nginx] Write the site config  (diff: +4)
-
-  warnings
-    3× deprecation: a module option is deprecated  (web-1, web-2)
-    1× Failed to look up user with uid 1001
-
-  raw log: kyo-20261123-120000.log
-```
+<p align="center">
+  <img src="docs/example.svg" alt="kyo plan summary: 3 changes on 2 hosts, nothing failed, with each change's diff under it, a warnings section and the raw log path" width="680">
+</p>
 
 With `--diff`, each change carries its diff beneath it (an identical diff on a
 later host points at the first). Without `--check` the summary reads

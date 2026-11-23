@@ -27,8 +27,8 @@ companion in Ursula K. Le Guin's *Rocannon's World*, the novel that coined the
 word "ansible".
 
 > [!NOTE]
-> Pre-alpha. The live view and the plan/apply summary work; exit-code policy,
-> prompts under the live view and replay are tracked in
+> Pre-alpha. The live view and the plan/apply summary work; exit-code policy
+> and prompts under the live view are tracked in
 > [issues](https://github.com/amberpixels/kyo/issues).
 
 ## Install
@@ -103,13 +103,28 @@ callback's text into the same events. The result is the same summary, minus
 per-play task totals and diff sizes. Other stdout callbacks (`minimal`,
 `dense`, custom ones) aren't parsed: kyo points you at the raw log instead.
 
+## Replay
+
+Every run also records what the view was built from, next to the raw log:
+`kyo-<timestamp>.log` gets a `kyo-<timestamp>.events.jsonl`. Replay it to see
+the run again, live block and summary, with no ansible and no hosts:
+
+```sh
+kyo --replay kyo-20261123-074237.events.jsonl
+```
+
+The replay takes 12 seconds whatever the run took, shows the run's own times,
+and exits with the run's exit code. The recording holds the same host names,
+task names and diffs as the raw log, so keep it out of version control too.
+
 ## Configuration
 
 Environment variables only, so nothing collides with ansible-playbook's flags.
 
 | Variable | Effect |
 |---|---|
-| `KYO_LOG=path` | Write the raw log here instead of `./kyo-<timestamp>.log`. `/dev/null` discards it. |
+| `KYO_LOG=path` | Write the raw log here instead of `./kyo-<timestamp>.log`. `/dev/null` discards it, and records no events. |
+| `KYO_REPLAY_SECONDS=n` | How long `--replay` takes (default 12). `0` goes straight to the summary. |
 | `KYO_PLAIN=1` | No repainted block: a line per finished play, per failure, and every 15s of quiet. Also on when `CI` or `CLAUDECODE` is set, or stderr is not a terminal. |
 | `NO_COLOR=1` | No color. The block still repaints. |
 | `KYO_PASSTHROUGH=1` | Don't wrap at all: ansible-playbook's own output and exit code. |

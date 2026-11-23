@@ -24,6 +24,7 @@ import (
 	"github.com/amberpixels/kyo/internal/ansiblecfg"
 	"github.com/amberpixels/kyo/internal/callback"
 	"github.com/amberpixels/kyo/internal/events"
+	"github.com/amberpixels/kyo/internal/recording"
 	"github.com/amberpixels/kyo/internal/render"
 	"github.com/amberpixels/kyo/internal/runner"
 	"github.com/amberpixels/kyo/internal/source"
@@ -95,8 +96,10 @@ func Run(ctx context.Context, opt Options) (int, error) {
 	}
 
 	agg := aggregator.New(opt.Now)
+	rec := startRecording(logPath, logf)
+	in := &inputs{agg: agg, rec: rec, now: opt.Now}
 	sw := source.New(source.Options{
-		Sink:      agg.Feed,
+		Sink:      in.Event,
 		Playbook:  playbookFromArgs(opt.Args),
 		Now:       opt.Now,
 		ForceText: noPlugin,
@@ -107,7 +110,14 @@ func Run(ctx context.Context, opt Options) (int, error) {
 	}
 
 	start := opt.Now()
-	view := startView(opt, agg, start)
+	check := argsCheck(opt.Args)
+	rec.Start(recording.Start{Time: start, Check: check, LogPath: logPath})
+	defer func() {
+		if err := rec.Close(); err != nil {
+			fmt.Fprintf(logf, "kyo: recording events failed: %v\n", err)
+		}
+	}()
+	view := startView(opt, agg, start, check)
 	defer view.close() // restore the cursor even on a panic; idempotent
 
 	res, err := runner.Run(ctx, runner.Options{
@@ -118,7 +128,7 @@ func Run(ctx context.Context, opt Options) (int, error) {
 		RawLog:   logf,
 		OnEvent:  onEvent,
 		OnStdout: sw.Stdout,
-		OnStderr: agg.Stderr,
+		OnStderr: in.Stderr,
 	})
 	view.stop()
 	if err != nil {
@@ -126,38 +136,62 @@ func Run(ctx context.Context, opt Options) (int, error) {
 		return 1, err
 	}
 	src := sw.Finish()
-	agg.Finish(opt.Now())
-	snap, elapsed := agg.Snapshot(), opt.Now().Sub(start)
+	end := opt.Now()
+	agg.Finish(end)
+	late := sw.Dropped()
+	rec.End(recording.End{
+		Time: end, ExitCode: res.ExitCode, Signaled: res.Signaled,
+		Source: sourceNames[src], NoPlugin: noPlugin, Late: late,
+	})
+	if late > 0 {
+		fmt.Fprintf(logf, "kyo: the callback plugin answered after the text was chosen; %d events ignored\n", late)
+	}
+	snap, elapsed := agg.Snapshot(), end.Sub(start)
 	view.end(snap, elapsed)
+	report(opt, ending{
+		snap: snap, elapsed: elapsed, logPath: logPath, check: check,
+		src: src, noPlugin: noPlugin, late: late,
+	})
+	return res.ExitCode, nil
+}
 
-	if src == source.None {
+// ending is what the summary needs from a finished run, live or replayed.
+type ending struct {
+	snap     aggregator.Snapshot
+	elapsed  time.Duration
+	logPath  string
+	check    bool
+	src      source.Source
+	noPlugin bool
+	late     int
+}
+
+// report prints the summary, or why there is none, after the view has ended.
+func report(opt Options, e ending) {
+	if e.src == source.None {
 		why := "no events from the callback plugin"
-		if noPlugin {
+		if e.noPlugin {
 			why = "KYO_NO_PLUGIN is set"
 		}
 		fmt.Fprintf(opt.Stderr, "kyo: %s, and the output is not the default callback's; the run's output is in %s\n",
-			why, logPath)
-		return res.ExitCode, nil
-	}
-	late := sw.Dropped()
-	if late > 0 {
-		fmt.Fprintf(logf, "kyo: the callback plugin answered after the text was chosen; %d events ignored\n", late)
+			why, e.logPath)
+		return
 	}
 	width, height := render.Size(opt.Stderr)
 	if height == 0 {
 		width = 0 // not a terminal: lines stay whole
 	}
-	render.Summary(opt.Stderr, snap, render.SummaryOpts{
-		LogPath:   logPath,
-		Elapsed:   elapsed,
+	render.Summary(opt.Stderr, e.snap, render.SummaryOpts{
+		LogPath:   e.logPath,
+		Elapsed:   e.elapsed,
 		Width:     width,
-		ArgsCheck: argsCheck(opt.Args),
+		ArgsCheck: e.check,
 		Styles:    render.NewStyles(opt.Stderr, opt.Env),
 	})
-	switch src {
+	switch e.src {
 	case source.Text:
 		why := "the callback plugin sent no events"
-		if late > 0 {
+		if e.late > 0 {
 			why = "the callback plugin answered too late"
 		}
 		fmt.Fprintf(opt.Stderr, "  read from the default callback's output: %s (no task totals or diff sizes)\n", why)
@@ -168,7 +202,64 @@ func Run(ctx context.Context, opt Options) (int, error) {
 		)
 	case source.None, source.Plugin:
 	}
-	return res.ExitCode, nil
+}
+
+// inputs is the aggregator's front door: each event and stderr line is
+// recorded and fed under one lock, so the recording holds them in the order
+// the aggregator saw them. The source's grace timer feeds from its own
+// goroutine, outside the runner's lock, so the runner's lock is not enough.
+type inputs struct {
+	mu  sync.Mutex
+	agg *aggregator.Aggregator
+	rec *recording.Writer
+	now func() time.Time
+}
+
+func (in *inputs) Event(ev events.Event) {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	in.rec.Event(ev)
+	in.agg.Feed(ev)
+}
+
+func (in *inputs) Stderr(line string) {
+	in.mu.Lock()
+	defer in.mu.Unlock()
+	in.rec.Stderr(in.now(), line)
+	in.agg.Stderr(line)
+}
+
+// sourceNames are the sources as a recording names them.
+var sourceNames = map[source.Source]string{
+	source.None:      "none",
+	source.Plugin:    "plugin",
+	source.Text:      "text",
+	source.TextForce: "text-force",
+}
+
+// recordingPath is where a run's events go, next to its raw log:
+// kyo-<ts>.log records to kyo-<ts>.events.jsonl. A discarded log records
+// nothing.
+func recordingPath(logPath string) string {
+	if logPath == os.DevNull {
+		return ""
+	}
+	return strings.TrimSuffix(logPath, ".log") + ".events.jsonl"
+}
+
+// startRecording opens the recording for logPath, or returns nil (record
+// nothing) with the reason in the raw log.
+func startRecording(logPath string, logf io.Writer) *recording.Writer {
+	path := recordingPath(logPath)
+	if path == "" {
+		return nil
+	}
+	rec, err := recording.Create(path)
+	if err != nil {
+		fmt.Fprintf(logf, "kyo: not recording events: %v\n", err)
+		return nil
+	}
+	return rec
 }
 
 // view shows the run's progress while it runs: a block repainted in place on
@@ -182,10 +273,9 @@ type view struct {
 	once  sync.Once
 }
 
-func startView(opt Options, agg *aggregator.Aggregator, start time.Time) *view {
+func startView(opt Options, agg *aggregator.Aggregator, start time.Time, check bool) *view {
 	v := &view{w: opt.Stderr, done: make(chan struct{})}
 	styles := render.NewStyles(opt.Stderr, opt.Env)
-	check := argsCheck(opt.Args)
 
 	if render.Plain(opt.Stderr, opt.Env) {
 		v.plain = render.NewPlainProgress(opt.Stderr, styles, check)

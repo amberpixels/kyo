@@ -171,6 +171,8 @@ func TestRunNoPlugin(t *testing.T) {
 	if !strings.Contains(string(log), "fd=[] cb=[]") {
 		t.Errorf("kyo's variables reached ansible:\n%s", log)
 	}
+	// the text source's events and its summary note replay too
+	assertReplays(t, filepath.Join(project, "run.events.jsonl"), code, stderr.String())
 }
 
 // TestRunNoPluginOtherCallback: with KYO_NO_PLUGIN and a stdout callback whose

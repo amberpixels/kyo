@@ -142,3 +142,32 @@ func Decode(line []byte) (Event, error) {
 	}
 	return ev, nil
 }
+
+// Encode writes ev as one line in the plugin's wire format, the inverse of
+// Decode: "diff" and "hosts" take the shape their kind gives them.
+func Encode(ev Event) ([]byte, error) {
+	type plain Event
+	w := struct {
+		plain
+
+		Diff  any `json:"diff,omitempty"`
+		Hosts any `json:"hosts,omitempty"`
+	}{plain: plain(ev)}
+	switch {
+	case ev.Kind == KindResult && ev.DiffStat != nil:
+		w.Diff = ev.DiffStat
+	case ev.Kind != KindResult && ev.Diff:
+		w.Diff = true
+	}
+	switch {
+	case ev.Kind == KindStats && ev.Recap != nil:
+		w.Hosts = ev.Recap
+	case ev.Kind != KindStats && ev.Hosts != nil:
+		w.Hosts = ev.Hosts
+	}
+	b, err := json.Marshal(w)
+	if err != nil {
+		return nil, fmt.Errorf("encoding event: %w", err)
+	}
+	return b, nil
+}

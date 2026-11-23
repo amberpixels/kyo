@@ -1,0 +1,32 @@
+# Exercises what the aggregator tracks beyond basic.yml: a failure a rescue
+# catches, handlers, include_role, and a looped task that changes with a diff.
+# Runs with -i testdata/inventory.ini; it writes only under KYO_TEST_DIR.
+- name: Flow
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Guarded step
+      block:
+        - name: Fail inside the block
+          ansible.builtin.fail:
+            msg: expected failure, rescued
+      rescue:
+        - name: Recover
+          ansible.builtin.debug:
+            msg: recovered
+
+    - name: Write the configs
+      ansible.builtin.copy:
+        dest: "{{ lookup('env', 'KYO_TEST_DIR') }}/{{ inventory_hostname }}-{{ item }}.conf"
+        content: "name={{ item }}\n"
+      loop: [one, two]
+      notify: Reload
+
+    - name: Include the app role
+      ansible.builtin.include_role:
+        name: app
+
+  handlers:
+    - name: Reload
+      ansible.builtin.debug:
+        msg: reloaded

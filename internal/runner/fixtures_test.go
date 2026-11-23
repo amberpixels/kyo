@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -140,11 +141,26 @@ func TestFixtures(t *testing.T) {
 				if pb := r.first(events.KindPlaybook); pb == nil || pb.File != "basic.yml" || !pb.Diff || pb.Check {
 					t.Errorf("playbook event %+v", pb)
 				}
-				if play := r.first(events.KindPlay); play == nil || play.Tasks != 7 {
-					t.Errorf("play event %+v, want 7 static tasks", play)
+				play := r.first(events.KindPlay)
+				if play == nil {
+					t.Fatal("no play event")
 				}
-				if r.first(events.KindInclude) == nil {
-					t.Error("no include event")
+				if n, ok := play.TaskCount(); !ok || n != 7 || len(play.Hosts) != 2 {
+					t.Errorf("play event %+v, want 7 static tasks on web-1 and web-2", play)
+				}
+				// included.yml counts its one task; include_role's count is unknown
+				var includes []int
+				for _, ev := range r.evs {
+					if ev.Kind == events.KindInclude {
+						n, ok := ev.TaskCount()
+						if !ok {
+							n = -1
+						}
+						includes = append(includes, n)
+					}
+				}
+				if !slices.Equal(includes, []int{1, -1}) {
+					t.Errorf("include task counts %v, want [1 -1]", includes)
 				}
 				var sawHandler bool
 				for _, ev := range r.evs {

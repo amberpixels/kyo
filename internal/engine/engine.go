@@ -1,7 +1,8 @@
-// Package engine wires the walking skeleton together: install the callback
-// plugin, point ansible at it without losing the user's plugin path, run the
-// playbook with its output going to the raw log, and print a recap built from
-// the plugin's events. The live view (issues 005-008) plugs in here.
+// Package engine wires a run together: install the callback plugin, point
+// ansible at it without losing the user's plugin path, run the playbook with
+// its output going to the raw log while the aggregator reads its events and
+// stderr, and print a recap from the aggregator's snapshot. The live view and
+// the summaries (issues 007, 008) read the same snapshot.
 package engine
 
 import (
@@ -12,13 +13,12 @@ import (
 	"os"
 	"os/exec"
 	"slices"
-	"sort"
 	"strings"
 	"time"
 
+	"github.com/amberpixels/kyo/internal/aggregator"
 	"github.com/amberpixels/kyo/internal/ansiblecfg"
 	"github.com/amberpixels/kyo/internal/callback"
-	"github.com/amberpixels/kyo/internal/events"
 	"github.com/amberpixels/kyo/internal/runner"
 )
 
@@ -68,78 +68,57 @@ func Run(ctx context.Context, opt Options) (int, error) {
 	}
 	env := append(slices.Clone(opt.Env), ansiblecfg.EnvKey+"="+cbPath)
 
-	var r recap
+	agg := aggregator.New(opt.Now)
 	start := opt.Now()
 	res, err := runner.Run(ctx, runner.Options{
-		Command: getenv(opt.Env, "KYO_ANSIBLE_PLAYBOOK"),
-		Args:    opt.Args,
-		Dir:     opt.Dir,
-		Env:     env,
-		RawLog:  logf,
-		OnEvent: r.feed,
+		Command:  getenv(opt.Env, "KYO_ANSIBLE_PLAYBOOK"),
+		Args:     opt.Args,
+		Dir:      opt.Dir,
+		Env:      env,
+		RawLog:   logf,
+		OnEvent:  agg.Feed,
+		OnStderr: agg.Stderr,
 	})
 	if err != nil {
 		return 1, err
 	}
+	agg.Finish(opt.Now())
 
-	r.print(opt.Stderr, res, logPath, opt.Now().Sub(start))
+	printRecap(opt.Stderr, agg.Snapshot(), res, logPath, opt.Now().Sub(start))
 	return res.ExitCode, nil
 }
 
-// recap is the skeleton's stand-in for the aggregator: just enough state for a
-// one-screen summary.
-type recap struct {
-	file  string
-	check bool
-	stats map[string]events.HostStats
-}
-
-func (r *recap) feed(ev events.Event) {
-	switch ev.Kind {
-	case events.KindPlaybook:
-		r.file, r.check = ev.File, ev.Check
-	case events.KindStats:
-		r.stats = ev.Recap
-	case events.KindPlay, events.KindTask, events.KindInclude, events.KindResult, events.KindPrompt:
-		// the aggregator's job (issue 005); the skeleton recap only needs stats
-	}
-}
-
-func (r *recap) print(w io.Writer, res *runner.Result, logPath string, elapsed time.Duration) {
+// printRecap is a one-screen stand-in until the plan/apply summary (issue 008).
+func printRecap(w io.Writer, s aggregator.Snapshot, res *runner.Result, logPath string, elapsed time.Duration) {
 	if res.Events == 0 {
 		fmt.Fprintf(w, "kyo: no events from the callback plugin; the run's output is in %s\n", logPath)
 		return
 	}
 	mode, verb := "apply", "changed"
-	if r.check {
+	if s.Check {
 		mode, verb = "plan", "would change"
 	}
 
-	var changed, failed, unreachable, hostsChanged int
-	hosts := make([]string, 0, len(r.stats))
-	for h, s := range r.stats {
-		hosts = append(hosts, h)
-		changed += s.Changed
-		failed += s.Failures
-		unreachable += s.Unreachable
-		if s.Changed > 0 {
+	hostsChanged := 0
+	for _, h := range s.Hosts {
+		if h.Changed > 0 {
 			hostsChanged++
 		}
 	}
-	sort.Strings(hosts)
-
-	fmt.Fprintf(w, "%s %s: %d %s on %d of %d hosts", mode, r.file, changed, verb, hostsChanged, len(hosts))
-	if failed > 0 {
-		fmt.Fprintf(w, ", %d failed", failed)
+	fmt.Fprintf(w, "%s %s: %d %s on %d of %d hosts", mode, s.File, s.Totals.Changed, verb, hostsChanged, len(s.Hosts))
+	if s.Totals.Failed > 0 {
+		fmt.Fprintf(w, ", %d failed", s.Totals.Failed)
 	}
-	if unreachable > 0 {
-		fmt.Fprintf(w, ", %d unreachable", unreachable)
+	if s.Totals.Unreachable > 0 {
+		fmt.Fprintf(w, ", %d unreachable", s.Totals.Unreachable)
 	}
 	fmt.Fprintf(w, "  (%s)\n", elapsed.Round(100*time.Millisecond))
-	for _, h := range hosts {
-		s := r.stats[h]
+	for _, h := range s.Hosts {
 		fmt.Fprintf(w, "  %-24s ok %-4d changed %-4d skipped %-4d failed %-4d unreachable %-4d ignored %d\n",
-			h, s.OK, s.Changed, s.Skipped, s.Failures, s.Unreachable, s.Ignored)
+			h.Host, h.OK, h.Changed, h.Skipped, h.Failed, h.Unreachable, h.Ignored)
+	}
+	if s.WarnTotal > 0 {
+		fmt.Fprintf(w, "warnings %d (%d deprecation)\n", s.WarnTotal, s.Deprecations)
 	}
 	fmt.Fprintf(w, "raw log: %s\n", logPath)
 }

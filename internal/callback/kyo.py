@@ -57,6 +57,70 @@ def _count_tasks(blocks):
     return n
 
 
+def _static_count(play):
+    """Counts the play's tasks as they will run: tag-filtered like the play
+    iterator does, falling back to the unfiltered count."""
+    blocks = play.compile()
+    try:
+        all_vars = play._variable_manager.get_vars(play=play)
+        blocks = [b.filter_tagged_tasks(all_vars) for b in blocks]
+    except Exception:  # noqa: BLE001 - tags only sharpen the count
+        pass
+    return _count_tasks(blocks)
+
+
+def _play_hosts(play):
+    """Resolves the play's hosts; the inventory is already limited by --limit
+    and restricted to the current serial batch."""
+    try:
+        return [h.get_name() for h in play._variable_manager._inventory.get_hosts(play.hosts)]
+    except Exception:  # noqa: BLE001 - a host list is a nicety, never fatal
+        return []
+
+
+def _count_entries(entries):
+    """Counts the task entries of a parsed tasks file, recursing into blocks.
+
+    Nested includes count as one task each: they send their own include event.
+    """
+    n = 0
+    for e in entries or []:
+        if isinstance(e, dict) and 'block' in e:
+            n += sum(_count_entries(e.get(k)) for k in ('block', 'rescue', 'always'))
+        elif isinstance(e, dict):
+            n += 1
+    return n
+
+
+def _include_count(included_file):
+    """Task count of an include_tasks file; -1 for include_role or on error."""
+    if getattr(included_file, '_is_role', False):
+        return -1
+    try:
+        data = included_file._task._loader.load_from_file(included_file._filename)
+    except Exception:  # noqa: BLE001
+        return -1
+    if data is None:
+        return 0
+    if not isinstance(data, list):
+        return -1
+    return _count_entries(data)
+
+
+def _rescuable(task):
+    """Whether a failure of task will be caught by a rescue section: some
+    ancestor block has one and the task sits in that block's main part.
+    Compares by uuid, because the play iterator copies tasks and blocks."""
+    node = task
+    parent = getattr(node, '_parent', None)
+    while parent is not None:
+        if getattr(parent, 'rescue', None) and any(
+                getattr(t, '_uuid', None) == node._uuid for t in getattr(parent, 'block', None) or []):
+            return True
+        node, parent = parent, getattr(parent, '_parent', None)
+    return False
+
+
 def _diff_stats(diffs):
     """Summarises a result's diff as added/removed line counts.
 
@@ -118,10 +182,10 @@ class CallbackModule(CallbackBase):
 
     def v2_playbook_on_play_start(self, play):
         try:
-            total = _count_tasks(play.compile())
+            total = _static_count(play)
         except Exception:  # noqa: BLE001 - a count is a nicety, never fatal
             total = -1
-        self._emit('play', name=play.get_name(), uuid=play._uuid, tasks=total)
+        self._emit('play', name=play.get_name(), uuid=play._uuid, tasks=total, hosts=_play_hosts(play))
 
     def v2_playbook_on_task_start(self, task, is_conditional):
         self._emit('task', name=task.get_name(), role=_role(task), action=task.action, uuid=task._uuid)
@@ -132,7 +196,7 @@ class CallbackModule(CallbackBase):
 
     def v2_playbook_on_include(self, included_file):
         self._emit('include', file=os.path.basename(included_file._filename),
-                   hosts=[h.get_name() for h in included_file._hosts])
+                   hosts=[h.get_name() for h in included_file._hosts], tasks=_include_count(included_file))
 
     def v2_playbook_on_vars_prompt(self, varname, *args, **kwargs):
         self._emit('prompt', var=varname)
@@ -141,12 +205,23 @@ class CallbackModule(CallbackBase):
         data = _data(result)
         task = _task(result)
         fields = {'host': _host(result).get_name(), 'uuid': task._uuid, 'status': status}
+        if status == 'failed':
+            try:
+                if _rescuable(task):
+                    fields['rescued'] = True
+            except Exception:  # noqa: BLE001 - stats still count it right
+                pass
         if not data.get('_ansible_no_log'):
             msg = data.get('msg')
             if msg:
                 fields['msg'] = str(msg)[:MSG_LIMIT]
             if 'diff' in data:
                 fields['diff'] = _diff_stats(data['diff'])
+            elif isinstance(data.get('results'), list):
+                items = [r.get('diff') for r in data['results']
+                         if isinstance(r, dict) and 'diff' in r and not r.get('_ansible_no_log')]
+                if items:
+                    fields['diff'] = _diff_stats([d for i in items for d in (i if isinstance(i, list) else [i])])
         for key in ('warnings', 'deprecations'):
             if data.get(key):
                 fields[key] = [w if isinstance(w, str) else (w.get('msg') if isinstance(w, dict) else str(w))

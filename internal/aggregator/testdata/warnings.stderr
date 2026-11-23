@@ -1,0 +1,19 @@
+[WARNING]: Deprecation warnings can be disabled by setting `deprecation_warnings=False` in ansible.cfg.
+[DEPRECATION WARNING]: Conditionals should not be surrounded by templating delimiters such as {{ }} or {% %}. This feature will be removed from ansible-core version 2.23.
+Origin: /work/site/roles/app/tasks/main.yml:10:13
+
+ 8     - name: Write the app config
+ 9       ansible.builtin.copy: src=app.conf dest=/etc/app.conf
+10       when: "{{ true }}"
+               ^ column 13
+
+[WARNING]: Host 'web-2' is using the discovered Python interpreter at '/usr/bin/python3.12'
+[DEPRECATION WARNING]: Conditionals should not be surrounded by templating delimiters such as {{ }} or {% %}. This feature will be removed from ansible-core version 2.23.
+Origin: /work/site/roles/web/tasks/main.yml:4:9
+
+[1;35m[WARNING]: Could not match supplied host pattern, ignoring: db[0m
+[WARNING]: The value 8080 (type int) in a string field was converted to
+'8080' (type string). If this does not look like what you expect, quote the
+entire value to ensure it does not change.
+
+[WARNING]: Could not match supplied host pattern, ignoring: cache

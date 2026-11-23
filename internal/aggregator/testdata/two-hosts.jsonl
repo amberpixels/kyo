@@ -1,0 +1,25 @@
+{"v":1,"ev":"playbook","t":100.0,"file":"site.yml","check":true,"diff":true}
+{"v":1,"ev":"play","t":100.0,"name":"Base","uuid":"p1","tasks":3,"hosts":["web-1","web-2"]}
+{"v":1,"ev":"task","t":100.1,"name":"Install packages","role":"","action":"ansible.builtin.package","uuid":"t1"}
+{"v":1,"ev":"result","t":101.0,"host":"web-1","uuid":"t1","status":"ok"}
+{"v":1,"ev":"result","t":101.5,"host":"web-2","uuid":"t1","status":"changed","diff":{"added":3,"removed":1}}
+{"v":1,"ev":"task","t":101.6,"name":"nginx : Write the site config","role":"nginx","action":"ansible.builtin.template","uuid":"t2"}
+{"v":1,"ev":"result","t":102.0,"host":"web-1","uuid":"t2","status":"failed","msg":"Destination directory does not exist"}
+{"v":1,"ev":"result","t":102.1,"host":"web-2","uuid":"t2","status":"changed","diff":{"added":4,"removed":0},"warnings":["Host 'web-2' is using the discovered Python interpreter at '/usr/bin/python3.12'"]}
+{"v":1,"ev":"task","t":102.2,"name":"Include extras","role":"","action":"ansible.builtin.include_role","uuid":"t3"}
+{"v":1,"ev":"result","t":102.3,"host":"web-2","uuid":"t3","status":"ok"}
+{"v":1,"ev":"include","t":102.3,"file":"extras","hosts":["web-2"],"tasks":-1}
+{"v":1,"ev":"task","t":102.4,"name":"extras : One","role":"extras","action":"ansible.builtin.debug","uuid":"t4"}
+{"v":1,"ev":"result","t":102.5,"host":"web-2","uuid":"t4","status":"skipped"}
+{"v":1,"ev":"task","t":102.6,"name":"extras : Two","role":"extras","action":"ansible.builtin.debug","uuid":"t5"}
+{"v":1,"ev":"result","t":102.7,"host":"web-2","uuid":"t5","status":"ignored","msg":"tolerated"}
+{"v":1,"ev":"task","t":102.8,"name":"Restart nginx","role":"","action":"ansible.builtin.service","uuid":"h1","handler":true}
+{"v":1,"ev":"result","t":103.0,"host":"web-2","uuid":"h1","status":"changed"}
+{"v":1,"ev":"play","t":104.0,"name":"Rolling","uuid":"p2","tasks":2,"hosts":["web-1"]}
+{"v":1,"ev":"task","t":104.1,"name":"Drain","role":"","action":"ansible.builtin.command","uuid":"t6"}
+{"v":1,"ev":"result","t":105.0,"host":"web-1","uuid":"t6","status":"unreachable","msg":"ssh: connect to host web-1 port 22: Connection refused"}
+{"v":1,"ev":"task","t":105.1,"name":"Deploy","role":"","action":"ansible.builtin.command","uuid":"t7"}
+{"v":1,"ev":"play","t":106.0,"name":"Rolling","uuid":"p2","tasks":2,"hosts":["web-2"]}
+{"v":1,"ev":"task","t":106.1,"name":"Drain","role":"","action":"ansible.builtin.command","uuid":"t6"}
+{"v":1,"ev":"result","t":106.5,"host":"web-2","uuid":"t6","status":"ok","deprecations":["The 'warn' parameter is deprecated. This feature will be removed in version 2.30."]}
+{"v":1,"ev":"stats","t":107.0,"hosts":{"web-1":{"ok":1,"changed":0,"failures":1,"unreachable":1,"skipped":0,"rescued":0,"ignored":0},"web-2":{"ok":7,"changed":3,"failures":0,"unreachable":0,"skipped":1,"rescued":0,"ignored":1}}}

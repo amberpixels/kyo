@@ -208,6 +208,10 @@ func TestFixtures(t *testing.T) {
 						(ev.DiffStat == nil || ev.DiffStat.Added != 1) {
 						t.Errorf("changed result %+v diff stat %+v, want 1 added line", ev, ev.DiffStat)
 					}
+					if ev.Kind == events.KindResult && ev.Status == events.StatusChanged &&
+						!strings.Contains(ev.DiffText, "\n@@ -0,0 +1 @@\n+") {
+						t.Errorf("changed result %+v, want its unified diff text", ev)
+					}
 				}
 				if entries, _ := os.ReadDir(r.dir); len(entries) != 0 {
 					t.Errorf("check mode wrote %d files", len(entries))

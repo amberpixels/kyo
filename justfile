@@ -45,8 +45,11 @@ record +NAMES="basic flow":
     out=internal/aggregator/testdata
     plugins="$(mktemp -d)" # a copy, so no __pycache__ lands in the source tree
     cp internal/callback/kyo.py "$plugins/"
+    # a fixed dir, so the diff text's paths carry nothing from this machine
+    testdir=/tmp/kyo-record
     for name in {{NAMES}}; do
-        KYO_TEST_DIR="$(mktemp -d)" KYO_FD=3 ANSIBLE_CALLBACK_PLUGINS="$plugins" \
+        rm -rf "$testdir" && mkdir -p "$testdir"
+        KYO_TEST_DIR="$testdir" KYO_FD=3 ANSIBLE_CALLBACK_PLUGINS="$plugins" \
             ANSIBLE_LOCALHOST_WARNING=false ANSIBLE_PYTHON_INTERPRETER=auto_silent ANSIBLE_NOCOLOR=1 \
             ansible-playbook -i testdata/inventory.ini --diff "testdata/playbooks/$name.yml" \
             3>"$out/$name.jsonl" 2>"$out/$name.stderr" >/dev/null || true

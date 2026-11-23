@@ -49,16 +49,17 @@ kyo site.yml --check
 ```
 
 While it runs, a block on stderr repaints in place: one row per play (finished
-ones collapse to a check mark and their duration), the task running now with
-each host's outcome as it reports, and the run's counters:
+ones collapse to a check mark and their duration), the running play's progress
+bar and the task running now with each host's outcome as it reports, and the
+run's counters under a rule:
 
 ```
-  site.yml · plan (--check) · 2 hosts                         1:42
+  site.yml · plan (--check) · 2 hosts                                 1:42
 
-  ✓ Base             6/6  0:21
-  ⠼ Deploy apps     9/31  [app] Write the app config
-                          web-1 ~  web-2 …
-
+  ✓ Base                   6/6  0:21
+  ⠼ Deploy apps ██░░░░░░░░ 9/31  29%  [app] Write the app config
+                                      web-1 ~  web-2 …
+  ────────────────────────────────────────────────────────────────────────
   ok 61   changed 3   skipped 22   failed 0   unreachable 0
   warnings 4 (3 deprecation)
 ```

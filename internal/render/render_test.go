@@ -5,11 +5,15 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 
 	"github.com/amberpixels/kyo/internal/aggregator"
 	"github.com/amberpixels/kyo/internal/events"
@@ -278,6 +282,77 @@ func TestPlainEnv(t *testing.T) {
 func TestNoColor(t *testing.T) {
 	if st := NewStyles(os.Stderr, []string{"NO_COLOR=1"}); st.failed.Render("x") != "x" {
 		t.Error("NO_COLOR must render plain")
+	}
+}
+
+// colorStyles are the colored styles forced to true color, as a terminal
+// would get them.
+func colorStyles() *Styles {
+	r := lipgloss.NewRenderer(io.Discard)
+	r.SetColorProfile(termenv.TrueColor)
+	return newStyles(r)
+}
+
+func TestCountersColoredByValue(t *testing.T) {
+	st := colorStyles()
+	line := countersLine(st, aggregator.Counters{OK: 3, Skipped: 2, Rescued: 1})
+	for _, want := range []string{
+		st.ok.Render("ok 3"),
+		st.skipped.Render("skipped 2"),
+		st.muted.Render("rescued 1"),
+		st.dim.Render("changed 0"),
+		st.dim.Render("failed 0"),
+	} {
+		if !strings.Contains(line, want) {
+			t.Errorf("counters %q lack %q", line, want)
+		}
+	}
+	if st.ok.Render("x") == "x" || st.skipped.Render("x") == "x" {
+		t.Error("a nonzero counter must carry color")
+	}
+}
+
+func TestRunningRowColored(t *testing.T) {
+	st := colorStyles()
+	s := manyHosts()
+	rows := playRows(st, s, Opts{Width: 100, Spinner: '⠼'})
+	row := rows[len(rows)-2]
+	for _, want := range []string{
+		st.spin.Render("⠼"),
+		st.bar.Render(strings.Repeat(barFill, 3)),
+		st.pct.Render("33%"),
+		st.dim.Render("[app_env]"),
+	} {
+		if !strings.Contains(row, want) {
+			t.Errorf("running row %q lacks %q", row, want)
+		}
+	}
+}
+
+func TestPlayBar(t *testing.T) {
+	cases := []struct {
+		p       aggregator.PlayProgress
+		filled  int
+		percent string
+	}{
+		{aggregator.PlayProgress{Done: 0, Total: 9, Exact: true}, 0, "0%"},
+		{aggregator.PlayProgress{Done: 3, Total: 9, Exact: true}, 3, "33%"},
+		{aggregator.PlayProgress{Done: 9, Total: 9, Exact: true}, playBarWidth, "100%"},
+		// a total that can still grow never reads full, nor gives a percentage
+		{aggregator.PlayProgress{Done: 4, Total: 4}, playBarWidth - 1, ""},
+		{aggregator.PlayProgress{Done: 0, Total: 0, Exact: true}, 0, ""},
+	}
+	for _, c := range cases {
+		bar := playBar(plainStyles(), c.p)
+		if got := strings.Count(bar, barFill); got != c.filled {
+			t.Errorf("%+v: %d filled cells, want %d", c.p, got, c.filled)
+		}
+		if w := len([]rune(bar)); w != playBarWidth {
+			t.Errorf("%+v: bar is %d cells, want %d", c.p, w, playBarWidth)
+		}
+		if got := percent(c.p); got != c.percent {
+			t.Errorf("%+v: percent %q, want %q", c.p, got, c.percent)
+		}
 	}
 }
 

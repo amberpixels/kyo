@@ -81,9 +81,8 @@ Environment variables only, so nothing collides with ansible-playbook's flags.
 
 ## Requirements
 
-`ansible-playbook` and `ansible-config` on your `PATH` (ansible-core).
-Developed against ansible-core 2.22; which older versions to support is still
-being decided.
+`ansible-playbook` and `ansible-config` on your `PATH`, from ansible-core 2.17
+or newer. CI tests 2.17, 2.19 and the latest release.
 
 ## Feedback
 

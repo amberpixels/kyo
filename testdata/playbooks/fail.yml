@@ -1,0 +1,13 @@
+# A real failure on web-2 only: web-1 carries on, web-2 stops, the run exits 2.
+- name: Fail
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Break web-2
+      ansible.builtin.fail:
+        msg: expected failure
+      when: inventory_hostname == 'web-2'
+
+    - name: After the failure
+      ansible.builtin.debug:
+        msg: still running

@@ -31,10 +31,10 @@ install:
 run *ARGS: build
     ./{{binary}} {{ARGS}}
 
-# Run the fixture playbook against localhost as a plan - no remote hosts
+# Run the fixture playbook on this machine as a plan - no remote hosts
 [group('dev')]
 demo: build
-    KYO_TEST_DIR="$(mktemp -d)" ANSIBLE_LOCALHOST_WARNING=false ./{{binary}} -i localhost, -c local --check --diff testdata/playbooks/basic.yml
+    KYO_TEST_DIR="$(mktemp -d)" ANSIBLE_LOCALHOST_WARNING=false ./{{binary}} -i testdata/inventory.ini --check --diff testdata/playbooks/basic.yml
 
 # Remove build artifacts
 [group('dev')]
@@ -77,6 +77,33 @@ vet:
 [group('test')]
 test *ARGS:
     go test {{ARGS}} ./...
+
+# Run the SSH ControlPersist test against a throwaway sshd on 127.0.0.1:PORT, run as you
+[group('test')]
+test-ssh PORT="2222":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="$(mktemp -d)"
+    trap 'kill "$(cat "$dir/pid" 2>/dev/null)" 2>/dev/null || true; rm -rf "$dir"' EXIT
+    ssh-keygen -q -t ed25519 -N '' -f "$dir/host_key"
+    ssh-keygen -q -t ed25519 -N '' -f "$dir/id"
+    cp "$dir/id.pub" "$dir/authorized_keys"
+    printf '%s\n' \
+        "Port {{PORT}}" \
+        "ListenAddress 127.0.0.1" \
+        "HostKey $dir/host_key" \
+        "AuthorizedKeysFile $dir/authorized_keys" \
+        "PidFile $dir/pid" \
+        "StrictModes no" \
+        "PasswordAuthentication no" \
+        "KbdInteractiveAuthentication no" > "$dir/sshd_config"
+    # sshd refuses to start unless invoked by absolute path
+    sshd="$(command -v sshd || echo /usr/sbin/sshd)"
+    "$sshd" -f "$dir/sshd_config" -E "$dir/sshd.log"
+    for _ in $(seq 50); do [ -s "$dir/pid" ] && break; sleep 0.1; done
+    KYO_SSH_HOST=127.0.0.1 KYO_SSH_PORT={{PORT}} KYO_SSH_KEY="$dir/id" \
+        go test -count=1 -run TestSSHControlPersist -v ./internal/runner/ \
+        || { cat "$dir/sshd.log"; exit 1; }
 
 # --- CI ---
 

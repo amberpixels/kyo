@@ -1,0 +1,5 @@
+- name: Configure app
+  ansible.builtin.copy:
+    dest: "{{ lookup('env', 'KYO_TEST_DIR') }}/{{ inventory_hostname }}-app.conf"
+    content: "port: 8080\n"
+  notify: Restart app

@@ -27,6 +27,7 @@ type SummaryOpts struct {
 	Width     int           // terminal width; long lines are cut to it (0 = no limit)
 	ArgsCheck bool          // --check in the args, when no playbook event said
 	Styles    *Styles       // nil = plain
+	Note      string        // a dim line under the headline; omitted when empty
 }
 
 // Summary prints the end-of-run report once, as plain lines that survive
@@ -39,9 +40,12 @@ func Summary(w io.Writer, s aggregator.Snapshot, opt SummaryOpts) {
 		st = plainStyles()
 	}
 	out := func(format string, a ...any) { line(w, fmt.Sprintf(format, a...), opt.Width) }
-	plan := isPlan(s, opt.ArgsCheck)
+	plan := IsPlan(s, opt.ArgsCheck)
 
 	out("%s", rightAlign("  "+headline(st, s, plan), clock(st, opt.Elapsed), opt.Width))
+	if opt.Note != "" {
+		out("  %s", st.dim.Render(opt.Note))
+	}
 
 	if failed := unrescued(s.Failures); len(failed) > 0 {
 		out("")

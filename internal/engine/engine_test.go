@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/amberpixels/kyo/internal/aggregator"
 )
 
 func TestWantPassthrough(t *testing.T) {
@@ -208,5 +210,81 @@ func TestRunNoPluginOtherCallback(t *testing.T) {
 	}
 	if !strings.Contains(stderr.String(), "KYO_NO_PLUGIN is set, and the output is not the default callback's") {
 		t.Errorf("summary:\n%s", stderr.String())
+	}
+}
+
+func TestExitCode(t *testing.T) {
+	plan := aggregator.Snapshot{File: "site.yml", Check: true}
+	planChanged := plan
+	planChanged.Changes = []aggregator.Change{{Host: "web-1", Task: "Write config"}}
+	apply := aggregator.Snapshot{File: "site.yml"}
+	apply.Changes = planChanged.Changes
+	early := aggregator.Snapshot{Changes: planChanged.Changes} // no playbook event: the args decide
+
+	cases := []struct {
+		name      string
+		child     int
+		snap      aggregator.Snapshot
+		detailed  bool
+		argsCheck bool
+		want      int
+	}{
+		{"plan with changes", 0, planChanged, true, false, ExitChangesPending},
+		{"plan without changes", 0, plan, true, false, 0},
+		{"failed plan with changes", 2, planChanged, true, false, 2},
+		{"apply with changes", 0, apply, true, false, 0},
+		{"flag unset", 0, planChanged, false, false, 0},
+		{"signal death", 130, planChanged, true, false, 130},
+		{"plan from the args", 0, early, true, true, ExitChangesPending},
+	}
+	for _, c := range cases {
+		if got := exitCode(c.child, c.snap, c.detailed, c.argsCheck); got != c.want {
+			t.Errorf("%s: got %d, want %d", c.name, got, c.want)
+		}
+	}
+}
+
+// TestRunDetailedExit: a plan with a pending change exits 10 under
+// KYO_DETAILED_EXIT=1, and says why under the headline.
+func TestRunDetailedExit(t *testing.T) {
+	if _, err := exec.LookPath("ansible-playbook"); err != nil {
+		t.Skip("ansible-playbook not on PATH")
+	}
+	project := t.TempDir()
+	write(t, filepath.Join(project, "site.yml"), `- hosts: all
+  gather_facts: false
+  tasks:
+    - ansible.builtin.command: "true"
+      changed_when: true
+      check_mode: false
+`)
+	run := func(detailed string) (int, string) {
+		var stderr bytes.Buffer
+		code, err := Run(context.Background(), Options{
+			Args: []string{"-i", "localhost,", "-c", "local", "--check", "site.yml"},
+			Env: []string{
+				"PATH=" + os.Getenv("PATH"),
+				"HOME=" + os.Getenv("HOME"),
+				"KYO_LOG=" + filepath.Join(project, "run.log"),
+				"KYO_DETAILED_EXIT=" + detailed,
+				"ANSIBLE_LOCALHOST_WARNING=false",
+				"ANSIBLE_PYTHON_INTERPRETER=auto_silent",
+			},
+			Dir:       project,
+			Stderr:    &stderr,
+			CacheRoot: t.TempDir(),
+			Lookup:    func(context.Context, string, []string) ([]string, error) { return nil, nil },
+		})
+		if err != nil {
+			t.Fatalf("err %v, stderr:\n%s", err, stderr.String())
+		}
+		return code, stderr.String()
+	}
+
+	if code, out := run("1"); code != ExitChangesPending || !strings.Contains(out, "exit 10: changes pending") {
+		t.Errorf("KYO_DETAILED_EXIT=1: code %d, stderr:\n%s", code, out)
+	}
+	if code, out := run(""); code != 0 || strings.Contains(out, "changes pending") {
+		t.Errorf("unset: code %d, stderr:\n%s", code, out)
 	}
 }

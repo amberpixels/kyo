@@ -9,6 +9,7 @@ import copy
 import json
 import os
 import re
+import sys
 import time
 
 from ansible import context
@@ -184,6 +185,14 @@ class CallbackModule(CallbackBase):
             self._out = os.fdopen(fd, 'w', buffering=1, encoding='utf-8')
         except (ValueError, OSError):
             self._out = None
+            return
+        # Display never flushes, and stdout is kyo's pipe, so a pause prompt
+        # would sit in the buffer until it was answered. ansible-playbook runs
+        # under python -E, so PYTHONUNBUFFERED cannot do this from outside.
+        try:
+            sys.stdout.reconfigure(line_buffering=True)
+        except (AttributeError, ValueError, OSError):
+            pass
 
     def _emit(self, ev, **fields):
         if self._out is None:

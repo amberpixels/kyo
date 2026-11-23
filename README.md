@@ -27,8 +27,8 @@ companion in Ursula K. Le Guin's *Rocannon's World*, the novel that coined the
 word "ansible".
 
 > [!NOTE]
-> Pre-alpha. The live view and the plan/apply summary work; exit-code policy
-> and prompts under the live view are tracked in
+> Pre-alpha. The live view, the plan/apply summary, prompts, the exit-code
+> policy and replay work; what comes next is tracked in
 > [issues](https://github.com/amberpixels/kyo/issues).
 
 ## Install
@@ -85,7 +85,7 @@ When it ends, the block gives way to the summary:
 With `--diff`, each change carries its diff beneath it (an identical diff on a
 later host points at the first). Without `--check` the summary reads
 `apply: 3 changed on 2 hosts`, with failed and unreachable hosts listed first. The exit
-code is ansible-playbook's own. Commands that only print and exit
+code is ansible-playbook's own (see [Exit codes](#exit-codes)). Commands that only print and exit
 (`--list-tasks`, `--list-hosts`, `--list-tags`, `--syntax-check`) run unwrapped.
 
 ## How It Works
@@ -103,6 +103,10 @@ callback's text into the same events. The result is the same summary, minus
 per-play task totals and diff sizes. Other stdout callbacks (`minimal`,
 `dense`, custom ones) aren't parsed: kyo points you at the raw log instead.
 
+Prompts keep working: vault, become and SSH passwords, `vars_prompt` and the
+`pause` module. While ansible waits for input, the live block steps aside and
+the prompt shows in its place. Typed input goes straight to ansible-playbook.
+
 ## Replay
 
 Every run also records what the view was built from, next to the raw log:
@@ -117,6 +121,33 @@ The replay takes 12 seconds whatever the run took, shows the run's own times,
 and exits with the run's exit code. The recording holds the same host names,
 task names and diffs as the raw log, so keep it out of version control too.
 
+## Exit codes
+
+kyo exits with ansible-playbook's own code, so scripts that check it keep
+working:
+
+| Code | Meaning |
+|---|---|
+| 0 | success |
+| 1 | error (also kyo's own failures, such as ansible-playbook not found) |
+| 2 | one or more hosts failed |
+| 3 | one or more hosts unreachable |
+| 4 | parser error |
+| 5 | bad or incomplete options |
+| 99 | interrupted (Ctrl-C) |
+| 250 | unexpected error |
+| 128+N | killed by signal N |
+| 10 | a plan with pending changes, under `KYO_DETAILED_EXIT=1` |
+
+`KYO_DETAILED_EXIT=1` is for drift checks in CI. A `--check` run that succeeds
+with changes pending exits 10 instead of 0, and the summary says why under
+the headline. A failing run keeps its own code, because a failure is not
+drift. An apply ignores the variable.
+
+A Ctrl-C on the terminal reaches ansible-playbook once, from the terminal
+itself, so it stops cleanly with 99. kyo forwards SIGTERM, and a SIGINT sent
+with `kill` while kyo runs without a terminal or in the background.
+
 ## Configuration
 
 Environment variables only, so nothing collides with ansible-playbook's flags.
@@ -125,6 +156,7 @@ Environment variables only, so nothing collides with ansible-playbook's flags.
 |---|---|
 | `KYO_LOG=path` | Write the raw log here instead of `./kyo-<timestamp>.log`. `/dev/null` discards it, and records no events. |
 | `KYO_REPLAY_SECONDS=n` | How long `--replay` takes (default 12). `0` goes straight to the summary. |
+| `KYO_DETAILED_EXIT=1` | On a plan (`--check`), exit 10 when changes are pending. See [Exit codes](#exit-codes). |
 | `KYO_PLAIN=1` | No repainted block: a line per finished play, per failure, and every 15s of quiet. Also on when `CI` or `CLAUDECODE` is set, or stderr is not a terminal. |
 | `NO_COLOR=1` | No color. The block still repaints. |
 | `KYO_PASSTHROUGH=1` | Don't wrap at all: ansible-playbook's own output and exit code. |

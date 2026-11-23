@@ -82,9 +82,9 @@ func headerLine(st *Styles, s aggregator.Snapshot, opt Opts) string {
 	return rightAlign("  "+strings.Join(parts, " · "), clock(st, opt.Elapsed), opt.Width)
 }
 
-// isPlan is the plugin's check flag, else --check in the args before the
+// IsPlan is the plugin's check flag, else --check in the args before the
 // playbook event has said.
-func isPlan(s aggregator.Snapshot, argsCheck bool) bool {
+func IsPlan(s aggregator.Snapshot, argsCheck bool) bool {
 	if s.File != "" || !s.Started.IsZero() {
 		return s.Check
 	}
@@ -92,7 +92,7 @@ func isPlan(s aggregator.Snapshot, argsCheck bool) bool {
 }
 
 func modeLabel(s aggregator.Snapshot, argsCheck bool) string {
-	if isPlan(s, argsCheck) {
+	if IsPlan(s, argsCheck) {
 		return "plan (--check)"
 	}
 	return "apply"

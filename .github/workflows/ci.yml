@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: |
+            go.sum
+            justfile
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      # The integration tests drive the real ansible-playbook. A version matrix
+      # is issue 012.
+      - run: pipx install ansible-core
+      - uses: extractions/setup-just@v4
+      - run: just ci

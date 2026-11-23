@@ -1,0 +1,33 @@
+# Exercises every per-host status kyo reports. Runs against localhost with
+# -c local; the only thing it writes is a file under KYO_TEST_DIR.
+- name: Basic
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: Write a file
+      ansible.builtin.copy:
+        dest: "{{ lookup('env', 'KYO_TEST_DIR') }}/out.txt"
+        content: "hello\n"
+
+    - name: Never runs
+      ansible.builtin.debug:
+        msg: skipped
+      when: false
+
+    - name: Loop
+      ansible.builtin.debug:
+        msg: "{{ item }}"
+      loop: [1, 2]
+
+    - name: Fail but carry on
+      ansible.builtin.fail:
+        msg: expected failure
+      ignore_errors: true
+
+    - name: Secret
+      ansible.builtin.debug:
+        msg: do-not-leak
+      no_log: true
+
+    - name: Include more
+      ansible.builtin.include_tasks: included.yml

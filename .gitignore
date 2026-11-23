@@ -1,0 +1,10 @@
+# run logs and recorded events carry real host, task and path names - never commit
+*.log
+*.events.jsonl
+
+# `just build` output
+/bin/
+/kyo
+
+# goreleaser build output
+/dist/

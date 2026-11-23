@@ -97,6 +97,12 @@ kyo over an inherited pipe. Your configured stdout callback keeps producing its
 usual output, which becomes the raw log, so nothing is scraped from text for
 the main signal.
 
+If the plugin can't load (an ignored plugin path, an ansible-core it doesn't
+support, a locked-down setup), kyo falls back to parsing the default stdout
+callback's text into the same events. The result is the same summary, minus
+per-play task totals and diff sizes. Other stdout callbacks (`minimal`,
+`dense`, custom ones) aren't parsed: kyo points you at the raw log instead.
+
 ## Configuration
 
 Environment variables only, so nothing collides with ansible-playbook's flags.
@@ -107,6 +113,7 @@ Environment variables only, so nothing collides with ansible-playbook's flags.
 | `KYO_PLAIN=1` | No repainted block: a line per finished play, per failure, and every 15s of quiet. Also on when `CI` or `CLAUDECODE` is set, or stderr is not a terminal. |
 | `NO_COLOR=1` | No color. The block still repaints. |
 | `KYO_PASSTHROUGH=1` | Don't wrap at all: ansible-playbook's own output and exit code. |
+| `KYO_NO_PLUGIN=1` | Inject nothing into ansible: no plugin, no extra variables. kyo reads the default callback's text instead. |
 | `KYO_ANSIBLE_PLAYBOOK=path` | The ansible-playbook to run (default: the one on `PATH`). |
 | `KYO_ANSIBLE_CONFIG=path` | The ansible-config used to read your `callback_plugins` (default: the one on `PATH`). |
 

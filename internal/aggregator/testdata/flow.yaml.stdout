@@ -1,0 +1,90 @@
+
+PLAY [Flow] ********************************************************************
+
+TASK [Fail inside the block] ***************************************************
+[ERROR]: Task failed: Action failed: expected failure, rescued
+Origin: testdata/playbooks/flow.yml:10:11
+
+ 8     - name: Guarded step
+ 9       block:
+10         - name: Fail inside the block
+             ^ column 11
+
+fatal: [web-1]: FAILED! => 
+    changed: false
+    msg: expected failure, rescued
+fatal: [web-2]: FAILED! => 
+    changed: false
+    msg: expected failure, rescued
+
+TASK [Recover] *****************************************************************
+ok: [web-1] => 
+    msg: recovered
+ok: [web-2] => 
+    msg: recovered
+
+TASK [Write the configs] *******************************************************
+--- before
++++ after: /tmp/kyo-record/web-2-one.conf
+@@ -0,0 +1 @@
++name=one
+
+changed: [web-2] => (item=one)
+--- before
++++ after: /tmp/kyo-record/web-1-one.conf
+@@ -0,0 +1 @@
++name=one
+
+changed: [web-1] => (item=one)
+--- before
++++ after: /tmp/kyo-record/web-2-two.conf
+@@ -0,0 +1 @@
++name=two
+
+--- before
++++ after: /tmp/kyo-record/web-1-two.conf
+@@ -0,0 +1 @@
++name=two
+
+changed: [web-2] => (item=two)
+changed: [web-1] => (item=two)
+
+TASK [Include the app role] ****************************************************
+included: app for web-1, web-2
+
+TASK [app : Configure app] *****************************************************
+--- before
++++ after: /tmp/kyo-record/web-1-app.conf
+@@ -0,0 +1 @@
++port: 8080
+
+changed: [web-1]
+--- before
++++ after: /tmp/kyo-record/web-2-app.conf
+@@ -0,0 +1 @@
++port: 8080
+
+changed: [web-2]
+
+TASK [app : Check the app] *****************************************************
+ok: [web-1] => 
+    msg: app ok
+ok: [web-2] => 
+    msg: app ok
+
+RUNNING HANDLER [Reload] *******************************************************
+ok: [web-1] => 
+    msg: reloaded
+ok: [web-2] => 
+    msg: reloaded
+
+RUNNING HANDLER [app : Restart app] ********************************************
+ok: [web-1] => 
+    msg: restarted
+ok: [web-2] => 
+    msg: restarted
+
+PLAY RECAP *********************************************************************
+web-1                      : ok=7    changed=2    unreachable=0    failed=0    skipped=0    rescued=1    ignored=0   
+web-2                      : ok=7    changed=2    unreachable=0    failed=0    skipped=0    rescued=1    ignored=0   
+

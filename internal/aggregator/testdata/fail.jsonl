@@ -1,0 +1,8 @@
+{"v": 1, "ev": "playbook", "t": 1795433201.952, "file": "fail.yml", "check": false, "diff": true}
+{"v": 1, "ev": "play", "t": 1795433201.953, "name": "Fail", "uuid": "02000000-0000-6061-bc29-000000000003", "tasks": 2, "hosts": ["web-1", "web-2"]}
+{"v": 1, "ev": "task", "t": 1795433201.955, "name": "Break web-2", "role": "", "action": "ansible.builtin.fail", "uuid": "02000000-0000-6061-bc29-000000000005"}
+{"v": 1, "ev": "result", "t": 1795433201.962, "host": "web-1", "uuid": "02000000-0000-6061-bc29-000000000005", "status": "skipped"}
+{"v": 1, "ev": "result", "t": 1795433201.967, "host": "web-2", "uuid": "02000000-0000-6061-bc29-000000000005", "status": "failed", "msg": "expected failure"}
+{"v": 1, "ev": "task", "t": 1795433201.967, "name": "After the failure", "role": "", "action": "ansible.builtin.debug", "uuid": "02000000-0000-6061-bc29-000000000006"}
+{"v": 1, "ev": "result", "t": 1795433201.973, "host": "web-1", "uuid": "02000000-0000-6061-bc29-000000000006", "status": "ok", "msg": "still running"}
+{"v": 1, "ev": "stats", "t": 1795433201.973, "hosts": {"web-1": {"ok": 1, "failures": 0, "unreachable": 0, "changed": 0, "skipped": 1, "rescued": 0, "ignored": 0}, "web-2": {"ok": 0, "failures": 1, "unreachable": 0, "changed": 0, "skipped": 0, "rescued": 0, "ignored": 0}}}

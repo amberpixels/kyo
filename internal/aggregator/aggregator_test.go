@@ -233,3 +233,19 @@ func TestSnapshotIsACopy(t *testing.T) {
 		t.Error("snapshot shares memory with the aggregator")
 	}
 }
+
+// A source that can't flag rescued failures (the text output) gets them
+// flagged by the recap, earliest first: an unrescued failure ends the host.
+func TestRecapMarksRescued(t *testing.T) {
+	a := New(fixedNow)
+	a.Feed(events.Event{Kind: events.KindPlay, Name: "Base", UUID: "p1"})
+	for i, uuid := range []string{"t1", "t2"} {
+		a.Feed(events.Event{Kind: events.KindTask, Name: []string{"Guarded", "Fatal"}[i], UUID: uuid})
+		a.Feed(events.Event{Kind: events.KindResult, Host: "web-1", UUID: uuid, Status: events.StatusFailed})
+	}
+	a.Feed(events.Event{Kind: events.KindStats, Recap: map[string]events.HostStats{"web-1": {Failures: 1, Rescued: 1}}})
+	f := a.Snapshot().Failures
+	if len(f) != 2 || !f[0].Rescued || f[0].Task != "Guarded" || f[1].Rescued {
+		t.Errorf("failures %+v, want Guarded rescued and Fatal not", f)
+	}
+}

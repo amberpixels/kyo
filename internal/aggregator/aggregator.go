@@ -253,7 +253,8 @@ func (a *Aggregator) result(ev events.Event) {
 
 // reconcile lets the final stats win per host. Ansible's recap buckets overlap
 // (a changed or ignored result also counts as ok), so they are made disjoint
-// first. The changes and failures lists stay as the results built them.
+// first. The changes list stays as the results built it; failures only gain
+// the rescued flag the recap proves.
 func (a *Aggregator) reconcile(recap map[string]events.HostStats) {
 	if recap == nil {
 		return
@@ -269,6 +270,7 @@ func (a *Aggregator) reconcile(recap map[string]events.HostStats) {
 			Rescued:     s.Rescued,
 			Unreachable: s.Unreachable,
 		}
+		a.markRescued(h, s.Rescued)
 		got := a.hosts[h]
 		if got != nil && *got == want {
 			continue
@@ -277,6 +279,27 @@ func (a *Aggregator) reconcile(recap map[string]events.HostStats) {
 		a.drift = append(a.drift, h)
 	}
 	slices.Sort(a.drift)
+}
+
+// markRescued flags a host's failures as rescued until the recap's count is
+// met, for a source that couldn't tell (the text output prints a rescued
+// failure like any other). Earliest first: a failure nothing rescues takes the
+// host out of the run, so it is always the host's last.
+func (a *Aggregator) markRescued(host string, want int) {
+	for _, f := range a.failures {
+		if f.Host == host && f.Rescued {
+			want--
+		}
+	}
+	for i := range a.failures {
+		if want <= 0 {
+			return
+		}
+		if f := &a.failures[i]; f.Host == host && !f.Rescued {
+			f.Rescued = true
+			want--
+		}
+	}
 }
 
 // stripRole drops the "role : " prefix ansible puts on a role task's name; the

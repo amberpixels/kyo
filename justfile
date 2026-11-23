@@ -36,25 +36,33 @@ run *ARGS: build
 demo: build
     KYO_TEST_DIR="$(mktemp -d)" ANSIBLE_LOCALHOST_WARNING=false ./{{binary}} -i testdata/inventory.ini --check --diff testdata/playbooks/basic.yml
 
-# Record the plugin's events and stderr for each fixture playbook into the
-# aggregator's testdata, e.g. `just record flow`. Rerun when the protocol moves
+# Record the plugin's events, stderr and the default callback's stdout for each
+# fixture playbook into the aggregator's testdata, plus the stdout again in the
+# yaml result format, e.g. `just record flow`. Rerun when the protocol moves
 [group('dev')]
-record +NAMES="basic flow":
+record +NAMES="basic flow fail":
     #!/usr/bin/env bash
     set -euo pipefail
     out=internal/aggregator/testdata
     plugins="$(mktemp -d)" # a copy, so no __pycache__ lands in the source tree
     cp internal/callback/kyo.py "$plugins/"
-    # a fixed dir, so the diff text's paths carry nothing from this machine
+    # a fixed dir, so the diff text's paths carry nothing from this machine, and
+    # the checkout's path scrubbed from the error excerpts on stdout
     testdir=/tmp/kyo-record
+    scrub() { sed -e "s|$PWD/||g"; }
     for name in {{NAMES}}; do
         rm -rf "$testdir" && mkdir -p "$testdir"
         KYO_TEST_DIR="$testdir" KYO_FD=3 ANSIBLE_CALLBACK_PLUGINS="$plugins" \
             ANSIBLE_LOCALHOST_WARNING=false ANSIBLE_PYTHON_INTERPRETER=auto_silent ANSIBLE_NOCOLOR=1 \
             ansible-playbook -i testdata/inventory.ini --diff "testdata/playbooks/$name.yml" \
-            3>"$out/$name.jsonl" 2>"$out/$name.stderr" >/dev/null || true
+            3>"$out/$name.jsonl" 2>"$out/$name.stderr" | scrub >"$out/$name.stdout" || true
         [ -s "$out/$name.stderr" ] || rm -f "$out/$name.stderr"
-        echo "recorded $out/$name.jsonl"
+        rm -rf "$testdir" && mkdir -p "$testdir"
+        KYO_TEST_DIR="$testdir" ANSIBLE_CALLBACK_RESULT_FORMAT=yaml \
+            ANSIBLE_LOCALHOST_WARNING=false ANSIBLE_PYTHON_INTERPRETER=auto_silent ANSIBLE_NOCOLOR=1 \
+            ansible-playbook -i testdata/inventory.ini --diff "testdata/playbooks/$name.yml" \
+            2>/dev/null | scrub >"$out/$name.yaml.stdout" || true
+        echo "recorded $out/$name.{jsonl,stdout,yaml.stdout}"
     done
 
 # Remove build artifacts

@@ -1,8 +1,10 @@
 // Package engine wires a run together: install the callback plugin, point
 // ansible at it without losing the user's plugin path, run the playbook with
-// its output going to the raw log while the aggregator reads its events and
-// stderr, show its progress (a repainted block on a terminal, milestone lines
-// elsewhere), and print the plan or apply summary from the final snapshot.
+// its output going to the raw log while the aggregator reads its events (from
+// the plugin, or parsed from the default callback's text when the plugin stays
+// silent) and stderr, show its progress (a repainted block on a terminal,
+// milestone lines elsewhere), and print the plan or apply summary from the
+// final snapshot.
 package engine
 
 import (
@@ -12,6 +14,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
@@ -20,8 +23,11 @@ import (
 	"github.com/amberpixels/kyo/internal/aggregator"
 	"github.com/amberpixels/kyo/internal/ansiblecfg"
 	"github.com/amberpixels/kyo/internal/callback"
+	"github.com/amberpixels/kyo/internal/events"
 	"github.com/amberpixels/kyo/internal/render"
 	"github.com/amberpixels/kyo/internal/runner"
+	"github.com/amberpixels/kyo/internal/source"
+	"github.com/amberpixels/kyo/internal/textparse"
 )
 
 // Repaint cadence on a terminal, and how often plain mode checks for a
@@ -60,9 +66,15 @@ func Run(ctx context.Context, opt Options) (int, error) {
 		return passthrough(ctx, opt)
 	}
 
-	pluginDir, err := callback.Install(opt.CacheRoot)
-	if err != nil {
-		return 1, err
+	// KYO_NO_PLUGIN: inject nothing into ansible and read only its text.
+	noPlugin := getenv(opt.Env, "KYO_NO_PLUGIN") == "1"
+
+	var pluginDir string
+	if !noPlugin {
+		var err error
+		if pluginDir, err = callback.Install(opt.CacheRoot); err != nil {
+			return 1, err
+		}
 	}
 
 	logPath := logDestination(opt.Env, opt.Now())
@@ -72,14 +84,28 @@ func Run(ctx context.Context, opt Options) (int, error) {
 	}
 	defer logf.Close()
 
-	cbPath, lookupErr := ansiblecfg.CallbackPath(ctx, pluginDir, opt.Dir, opt.Env, opt.Lookup)
-	if lookupErr != nil {
-		// The run still works; only a custom callback_plugins dir may be missed.
-		fmt.Fprintf(logf, "kyo: reading callback_plugins failed, using defaults: %v\n", lookupErr)
+	env := opt.Env
+	if !noPlugin {
+		cbPath, lookupErr := ansiblecfg.CallbackPath(ctx, pluginDir, opt.Dir, opt.Env, opt.Lookup)
+		if lookupErr != nil {
+			// The run still works; only a custom callback_plugins dir may be missed.
+			fmt.Fprintf(logf, "kyo: reading callback_plugins failed, using defaults: %v\n", lookupErr)
+		}
+		env = append(slices.Clone(opt.Env), ansiblecfg.EnvKey+"="+cbPath)
 	}
-	env := append(slices.Clone(opt.Env), ansiblecfg.EnvKey+"="+cbPath)
 
 	agg := aggregator.New(opt.Now)
+	sw := source.New(source.Options{
+		Sink:      agg.Feed,
+		Playbook:  playbookFromArgs(opt.Args),
+		Now:       opt.Now,
+		ForceText: noPlugin,
+	})
+	var onEvent func(events.Event)
+	if !noPlugin {
+		onEvent = sw.Event
+	}
+
 	start := opt.Now()
 	view := startView(opt, agg, start)
 	defer view.close() // restore the cursor even on a panic; idempotent
@@ -90,7 +116,8 @@ func Run(ctx context.Context, opt Options) (int, error) {
 		Dir:      opt.Dir,
 		Env:      env,
 		RawLog:   logf,
-		OnEvent:  agg.Feed,
+		OnEvent:  onEvent,
+		OnStdout: sw.Stdout,
 		OnStderr: agg.Stderr,
 	})
 	view.stop()
@@ -98,12 +125,18 @@ func Run(ctx context.Context, opt Options) (int, error) {
 		view.clear()
 		return 1, err
 	}
+	src := sw.Finish()
 	agg.Finish(opt.Now())
 	snap, elapsed := agg.Snapshot(), opt.Now().Sub(start)
 	view.end(snap, elapsed)
 
-	if res.Events == 0 {
-		fmt.Fprintf(opt.Stderr, "kyo: no events from the callback plugin; the run's output is in %s\n", logPath)
+	if src == source.None {
+		fmt.Fprintf(
+			opt.Stderr,
+			"kyo: no events from the callback plugin, and the output is not the default callback's; "+
+				"the run's output is in %s\n",
+			logPath,
+		)
 		return res.ExitCode, nil
 	}
 	width, height := render.Size(opt.Stderr)
@@ -117,6 +150,19 @@ func Run(ctx context.Context, opt Options) (int, error) {
 		ArgsCheck: argsCheck(opt.Args),
 		Styles:    render.NewStyles(opt.Stderr, opt.Env),
 	})
+	switch src {
+	case source.Text:
+		fmt.Fprintln(
+			opt.Stderr,
+			"  read from the default callback's output: the callback plugin sent no events (no task totals or diff sizes)",
+		)
+	case source.TextForce:
+		fmt.Fprintln(
+			opt.Stderr,
+			"  read from the default callback's output: KYO_NO_PLUGIN is set (no task totals or diff sizes)",
+		)
+	case source.None, source.Plugin:
+	}
 	return res.ExitCode, nil
 }
 
@@ -230,6 +276,37 @@ func argsCheck(args []string) bool {
 		}
 	}
 	return false
+}
+
+// valueFlags are ansible-playbook options that take the next argument as
+// their value, so a .yml after them is not the playbook.
+var valueFlags = []string{
+	"-i", "--inventory", "--inventory-file", "-e", "--extra-vars", "-l", "--limit",
+	"-t", "--tags", "--skip-tags", "-u", "--user", "-c", "--connection", "-f", "--forks",
+	"-M", "--module-path", "-T", "--timeout", "--vault-id", "--vault-password-file",
+	"--vault-pass-file", "--private-key", "--key-file", "--become-method", "--become-user",
+	"--become-password-file", "--connection-password-file", "--start-at-task",
+	"--ssh-common-args", "--sftp-extra-args", "--scp-extra-args", "--ssh-extra-args",
+}
+
+// playbookFromArgs reads what the plugin's playbook event would carry from the
+// command line, for the text source: the first playbook's file name, --check
+// and --diff.
+func playbookFromArgs(args []string) textparse.Playbook {
+	pb := textparse.Playbook{Check: argsCheck(args)}
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--diff" || a == "-D":
+			pb.Diff = true
+		case slices.Contains(valueFlags, a):
+			i++
+		case pb.File == "" && !strings.HasPrefix(a, "-") &&
+			(strings.HasSuffix(a, ".yml") || strings.HasSuffix(a, ".yaml")):
+			pb.File = filepath.Base(a)
+		}
+	}
+	return pb
 }
 
 func wantPassthrough(args, env []string) bool {

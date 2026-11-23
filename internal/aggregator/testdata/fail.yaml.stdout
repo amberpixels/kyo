@@ -1,0 +1,25 @@
+
+PLAY [Fail] ********************************************************************
+
+TASK [Break web-2] *************************************************************
+skipping: [web-1]
+[ERROR]: Task failed: Action failed: expected failure
+Origin: testdata/playbooks/fail.yml:6:7
+
+4   gather_facts: false
+5   tasks:
+6     - name: Break web-2
+        ^ column 7
+
+fatal: [web-2]: FAILED! => 
+    changed: false
+    msg: expected failure
+
+TASK [After the failure] *******************************************************
+ok: [web-1] => 
+    msg: still running
+
+PLAY RECAP *********************************************************************
+web-1                      : ok=1    changed=0    unreachable=0    failed=0    skipped=1    rescued=0    ignored=0   
+web-2                      : ok=0    changed=0    unreachable=0    failed=1    skipped=0    rescued=0    ignored=0   
+

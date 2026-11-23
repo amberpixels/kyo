@@ -1,0 +1,79 @@
+# GoReleaser config for kyo - builds cross-platform binaries, cuts a GitHub
+# Release, and publishes the Homebrew cask to amberpixels/homebrew-tap.
+# Docs: https://goreleaser.com
+version: 2
+
+project_name: kyo
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: kyo
+    main: ./cmd/kyo
+    binary: kyo
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - id: kyo
+    formats: [tar.gz]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"
+
+homebrew_casks:
+  - name: kyo
+    repository:
+      owner: amberpixels
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: "https://github.com/amberpixels/kyo"
+    description: "Hear every host as one - a drop-in ansible-playbook wrapper with a live view and a plan/apply summary"
+    commit_author:
+      name: amberpixels
+      email: amber.pixels.io@gmail.com
+    # The binaries are ad-hoc signed but not notarized, so macOS Gatekeeper
+    # quarantines them on download and kills them on first run. Strip the
+    # quarantine attribute on install so `kyo` runs without the popup.
+    # install_steps is written as postflight_steps, because Homebrew 7
+    # deprecated the postflight stanza.
+    hooks:
+      post:
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/kyo"], must_succeed: false
+          end
+    caveats: |
+      kyo wraps ansible-playbook, which is NOT installed by this cask.
+      It needs ansible-core 2.17 or newer on your PATH, for example:
+        brew install ansible
+      or:
+        pipx install ansible-core

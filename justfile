@@ -140,5 +140,18 @@ test-ssh PORT="2222":
 [group('ci')]
 ci: build lint test
 
+# --- Release ---
+
+# Validate the GoReleaser config
+[group('release')]
+release--check:
+    goreleaser check
+
+# Build a local release snapshot into dist/ - no tagging, no publishing
+[group('release')]
+release--snapshot:
+    goreleaser release --snapshot --clean
+
 alias t := test
 alias b := build
+alias snapshot := release--snapshot

@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 708" width="680" height="708" xml:space="preserve" font-family="'SFMono-Regular', ui-monospace, Menlo, Monaco, Consolas, monospace" font-size="14">
+  <rect x="0.5" y="0.5" width="679" height="707" rx="10" fill="#0d1117" stroke="#30363d"/>
+
+  <!-- window chrome -->
+  <circle cx="28" cy="26" r="6" fill="#ff5f56"/>
+  <circle cx="50" cy="26" r="6" fill="#ffbd2e"/>
+  <circle cx="72" cy="26" r="6" fill="#27c93f"/>
+
+  <!-- a plan summary with diffs, as internal/render/summary.go prints it -->
+  <text x="36" y="72"><tspan fill="#22C55E" font-weight="700">plan: 3 changes on 2 hosts, nothing failed</tspan></text>
+  <text x="36" y="112"><tspan fill="#cdd9e5" font-weight="700">web-1</tspan></text>
+  <text x="36" y="132"><tspan fill="#adbac7">  </tspan><tspan fill="#F59E0B">~</tspan><tspan fill="#adbac7"> [app] Write the app config     </tspan><tspan fill="#768390">(diff: +4 -1)</tspan></text>
+  <text x="36" y="152"><tspan fill="#adbac7">    </tspan><tspan fill="#768390">--- before: /etc/app/app.yml</tspan></text>
+  <text x="36" y="172"><tspan fill="#adbac7">    </tspan><tspan fill="#768390">+++ after: /etc/app/app.yml</tspan></text>
+  <text x="36" y="192"><tspan fill="#adbac7">    </tspan><tspan fill="#14B8A6">@@ -1,3 +1,6 @@</tspan></text>
+  <text x="36" y="212"><tspan fill="#adbac7">    </tspan><tspan fill="#adbac7"> listen: 8080</tspan></text>
+  <text x="36" y="232"><tspan fill="#adbac7">    </tspan><tspan fill="#EF4444">-workers: 2</tspan></text>
+  <text x="36" y="252"><tspan fill="#adbac7">    </tspan><tspan fill="#22C55E">+workers: 4</tspan></text>
+  <text x="36" y="272"><tspan fill="#adbac7">    </tspan><tspan fill="#22C55E">+cache:</tspan></text>
+  <text x="36" y="292"><tspan fill="#adbac7">    </tspan><tspan fill="#22C55E">+  dir: /var/cache/app</tspan></text>
+  <text x="36" y="312"><tspan fill="#adbac7">    </tspan><tspan fill="#22C55E">+  ttl: 300</tspan></text>
+  <text x="36" y="332"><tspan fill="#adbac7">    </tspan><tspan fill="#adbac7"> log: info</tspan></text>
+  <text x="36" y="352"><tspan fill="#adbac7">  </tspan><tspan fill="#F59E0B">~</tspan><tspan fill="#adbac7"> [nginx] Write the site config  </tspan><tspan fill="#768390">(diff: +4)</tspan></text>
+  <text x="36" y="372"><tspan fill="#adbac7">    </tspan><tspan fill="#768390">--- before</tspan></text>
+  <text x="36" y="392"><tspan fill="#adbac7">    </tspan><tspan fill="#768390">+++ after: /etc/nginx/sites-enabled/app.conf</tspan></text>
+  <text x="36" y="412"><tspan fill="#adbac7">    </tspan><tspan fill="#14B8A6">@@ -0,0 +1,4 @@</tspan></text>
+  <text x="36" y="432"><tspan fill="#adbac7">    </tspan><tspan fill="#22C55E">+server {</tspan></text>
+  <text x="36" y="452"><tspan fill="#adbac7">    </tspan><tspan fill="#22C55E">+    listen 80;</tspan></text>
+  <text x="36" y="472"><tspan fill="#adbac7">    </tspan><tspan fill="#22C55E">+    location / { proxy_pass http://127.0.0.1:8080; }</tspan></text>
+  <text x="36" y="492"><tspan fill="#adbac7">    </tspan><tspan fill="#22C55E">+}</tspan></text>
+  <text x="36" y="532"><tspan fill="#cdd9e5" font-weight="700">web-2</tspan></text>
+  <text x="36" y="552"><tspan fill="#adbac7">  </tspan><tspan fill="#F59E0B">~</tspan><tspan fill="#adbac7"> [nginx] Write the site config  </tspan><tspan fill="#768390">(diff: +4)</tspan></text>
+  <text x="36" y="572"><tspan fill="#adbac7">    </tspan><tspan fill="#768390">(same diff as web-1)</tspan></text>
+  <text x="36" y="612"><tspan fill="#F59E0B">warnings</tspan></text>
+  <text x="36" y="632"><tspan fill="#adbac7">  3× deprecation: a module option is deprecated  </tspan><tspan fill="#768390">(web-1, web-2)</tspan></text>
+  <text x="36" y="672"><tspan fill="#768390">raw log: kyo-20261123-120000.log</tspan></text>
+  <text x="644" y="72" text-anchor="end" fill="#F472B6">0:42</text>
+</svg>

@@ -1,6 +1,12 @@
 package events
 
-import "testing"
+import (
+	"bytes"
+	"os"
+	"path/filepath"
+	"reflect"
+	"testing"
+)
 
 func TestDecodeKinds(t *testing.T) {
 	cases := []struct {
@@ -104,6 +110,38 @@ func TestDecodeRejects(t *testing.T) {
 	for _, line := range []string{`not json`, `{"v":1}`} {
 		if _, err := Decode([]byte(line)); err == nil {
 			t.Errorf("Decode(%q) should fail", line)
+		}
+	}
+}
+
+// TestEncodeRoundTrip pins Encode against every recorded fixture: decoding
+// what it writes gives back the event it was given.
+func TestEncodeRoundTrip(t *testing.T) {
+	paths, err := filepath.Glob("../aggregator/testdata/*.jsonl")
+	if err != nil || len(paths) == 0 {
+		t.Fatalf("no fixtures: %v", err)
+	}
+	for _, path := range paths {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for i, line := range bytes.Split(bytes.TrimSpace(data), []byte("\n")) {
+			want, err := Decode(line)
+			if err != nil {
+				t.Fatalf("%s:%d: %v", path, i+1, err)
+			}
+			enc, err := Encode(want)
+			if err != nil {
+				t.Fatalf("%s:%d: %v", path, i+1, err)
+			}
+			got, err := Decode(enc)
+			if err != nil {
+				t.Fatalf("%s:%d: decoding %s: %v", path, i+1, enc, err)
+			}
+			if !reflect.DeepEqual(got, want) {
+				t.Errorf("%s:%d: round trip\n got %+v\nwant %+v\n enc %s", path, i+1, got, want, enc)
+			}
 		}
 	}
 }
